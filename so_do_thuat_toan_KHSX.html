@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Sơ đồ Thuật toán KHSX C.P. Bình Dương</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            margin: 0;
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            color: #00e676;
+            margin-bottom: 5px;
+            font-size: 28px;
+            font-weight: 700;
+        }
+        p {
+            color: #b0bec5;
+            margin-bottom: 25px;
+            font-size: 15px;
+        }
+        .controls {
+            margin-bottom: 25px;
+            display: flex;
+            gap: 15px;
+        }
+        button {
+            background-color: #00e676;
+            color: #121212;
+            border: none;
+            padding: 12px 24px;
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0, 230, 118, 0.2);
+            transition: all 0.2s ease;
+        }
+        button:hover {
+            background-color: #00c853;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(0, 230, 118, 0.3);
+        }
+        #container {
+            width: 100%;
+            max-width: 1400px;
+            background-color: #1a1a1a;
+            border: 1px solid #2d2d2d;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            display: flex;
+            justify-content: center;
+            overflow-x: auto;
+        }
+        .mermaid {
+            width: 100%;
+            background-color: #1a1a1a;
+        }
+        /* Custom kiểu dáng sơ đồ Mermaid khi xuất ra */
+        .node rect {
+            rx: 6px !important;
+            ry: 6px !important;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose',
+            flowchart: {
+                useMaxWidth: false,
+                htmlLabels: true,
+                curve: 'basis'
+            }
+        });
+    </script>
+</head>
+<body>
+    <h1>Sơ đồ Thuật toán KHSX C.P. Bình Dương</h1>
+    <p>Bản vẽ gốc chất lượng cao Vector - Tự động vẽ và hỗ trợ thu phóng vô hạn</p>
+    <div class="controls">
+        <button onclick="downloadSVG()">Tải ảnh SVG (Chất lượng Vector cực nét)</button>
+        <button onclick="downloadPNG()">Tải ảnh PNG</button>
+    </div>
+    <div id="container">
+        <div class="mermaid">
+graph TD
+    classDef inputStyle fill:#e1f5fe,stroke:#03a9f4,stroke-width:2px,color:#01579b;
+    classDef preStyle fill:#ede7f6,stroke:#673ab7,stroke-width:2px,color:#311b92;
+    classDef priorityStyle fill:#fff8e1,stroke:#ffc107,stroke-width:2px,color:#ff6f00;
+    classDef smoothStyle fill:#ffebee,stroke:#e91e63,stroke-width:2px,color:#880e4f;
+    classDef normStyle fill:#e8f5e9,stroke:#4caf50,stroke-width:2px,color:#1b5e20;
+    classDef outputStyle fill:#e0f2f1,stroke:#009688,stroke-width:2px,color:#004d40;
+
+    subgraph K1 [📥 1. NGUỒN DỮ LIỆU ĐẦU VÀO]
+        I1["Tồn kho thành phẩm (FFStock)<br/>& Tồn bồn Mixer (Tonbon)"]:::inputStyle
+        I2["Sales Forecast Tuần<br/>(Dự báo & Quy cách)"]:::inputStyle
+        I3["Silo Plan & Ba Cang Plan<br/>(Đơn hàng xe bồn/bá cang)"]:::inputStyle
+        I4["Điều chỉnh nhanh ngày hôm nay<br/>(Sub/Add/Cancel)"]:::inputStyle
+        I5["KHSX & Thực tế hôm qua<br/>(Để tính Shortfall)"]:::inputStyle
+    end
+
+    subgraph K2 [🛠️ 2. TIỀN XỬ LÝ & CHUẨN HÓA CÁM NỀN]
+        P1["Thay thế mã cám đột xuất<br/>(Substitutions)"]:::preStyle
+        P2["Ánh xạ cám thương hiệu sang Cám nền<br/>(Base Code Mapping)"]:::preStyle
+        P3["Cộng dồn Tồn kho & Tồn bồn Mixer<br/>(FFStock + Tonbon)"]:::preStyle
+        P4["Xác định danh sách mã chỉ chạy Silo<br/>(Silo-Only Products)"]:::preStyle
+    end
+
+    I1 & I2 & I3 & I4 & I5 --> P1
+    P1 --> P2 --> P3 --> P4
+
+    subgraph K3 [📊 3. ENGINE ĐỘ ƯU TIÊN & DOH]
+        E1{"Duyệt từng cám nền"}:::priorityStyle
+        U1["🥇 Ưu tiên 1: SILO & BÁ CANG<br/>(Đơn xe bồn/bá cang ngày mai)"]:::priorityStyle
+        U2["🥈 Ưu tiên 2: WALK-IN<br/>(Đơn hàng trại phát sinh khẩn cấp)"]:::priorityStyle
+        U3["🥉 Ưu tiên 3: SHORTFALL<br/>(Bù lượng thiếu hụt ca trước)"]:::priorityStyle
+        U4["🏅 Ưu tiên 4: FORECAST TUẦN<br/>(Lượng dự báo tuần còn lại)"]:::priorityStyle
+        DOH_Check{"Tồn kho thực tế:<br/>DOH < 3.0 Ngày?"}:::priorityStyle
+    end
+
+    P4 --> E1
+    E1 --> U1
+    E1 --> U2
+    E1 --> U3
+    E1 --> U4
+    U4 --> DOH_Check
+    DOH_Check -- "Đúng (DOH < 3)" --> Active_FC["Kích hoạt sản xuất hôm nay"]:::priorityStyle
+    DOH_Check -- "Sai (DOH >= 3)" --> Skip_FC["Hoãn sản xuất (Tồn kho an toàn)"]:::priorityStyle
+
+    subgraph K4 [⚡ 4. ĐIỀU CHỈNH ĐỘT XUẤT & ĐÓNG GÓI]
+        Q1["Áp dụng hủy mẻ (Cancellations)"]:::preStyle
+        Q2["Bổ sung mẻ mới (Additions)"]:::preStyle
+        Q3{"Sản phẩm nằm trong danh sách Silo-only?"}:::preStyle
+        Q_Force["Cưỡng bức quy cách về SILO<br/>(silo_truck = tons, xóa bao)"]:::preStyle
+        Q_Keep["Giữ nguyên quy cách đóng bao"]:::preStyle
+    end
+
+    U1 & U2 & U3 & Active_FC --> Q1 --> Q2 --> Q3
+    Q3 -- "Đúng" --> Q_Force
+    Q3 -- "Sai" --> Q_Keep
+
+    subgraph K5 [🌊 5. BỘ LỌC LÀM MỊN TẢI SILO]
+        S1{"Tổng Silo dự kiến > 750 Tấn?"}:::smoothStyle
+        S2["Sắp xếp hàng đợi xe bồn<br/>(Độ ưu tiên giảm dần)"]:::smoothStyle
+        S3["Giữ lại các đơn hàng Silo cao nhất<br/>cho đến khi tích lũy sát 750.0T"]:::smoothStyle
+        S_Defer["Hoãn phần Silo vượt ngưỡng<br/>(Đặt silo_truck = 0.0)"]:::smoothStyle
+        S_Check{"Mã cám có đóng bao khác?"}:::smoothStyle
+        S_Del["Xóa hoàn toàn khỏi KHSX hôm nay<br/>(Đối với dòng Silo-only)"]:::smoothStyle
+        S_Recalc["Tính lại số mẻ & sản lượng đóng bao<br/>(Để đạt mẻ tiêu chuẩn)"]:::smoothStyle
+    end
+
+    Q_Force & Q_Keep --> S1
+    S1 -- "Đúng" --> S2 --> S3 --> S_Defer --> S_Check
+    S_Check -- "Không" --> S_Del
+    S_Check -- "Có" --> S_Recalc
+    S1 -- "Sai (An toàn)" --> S_Keep_All["Giữ nguyên toàn bộ Kế hoạch Silo"]:::smoothStyle
+
+    subgraph K6 [📐 6. CHUẨN HÓA MẺ & PHÂN BỔ BAO BÌ CHI TIẾT]
+        N1["Xác định trọng lượng mẻ chuẩn<br/>(Mẻ 8.0 Tấn: Họ 550, 551, 325F<br/>Mẻ 8.4 Tấn: Tất cả các dòng khác)"]:::normStyle
+        N2["Quy đổi tổng sản lượng tiêu chuẩn:<br/>tons = batches × standard_tpb"]:::normStyle
+        N3["Phân bổ sản lượng đóng bao sang quy cách<br/>(25kg, 40kg, 50kg) & Thương hiệu đại lý<br/>(Higro, CP, Star, Nuvo, Bell, Nasa, White)"]:::normStyle
+    end
+
+    S3 & S_Recalc & S_Keep_All --> N1 --> N2 --> N3
+
+    subgraph K7 [💾 7. ĐẦU RA CHUẨN CHỈNH]
+        O1["Xuất file KHSX Excel chuẩn màu sắc<br/>(Có đầy đủ cột bao bì & xe bồn)"]:::outputStyle
+        O2["Kiểm toán tự động qua Grader V2<br/>(Xác nhận 0 lỗi thực tế)"]:::outputStyle
+        O3["Đồng bộ trình tự tháp trộn Mixer<br/>(Đảm bảo an toàn sinh học ca làm việc)"]:::outputStyle
+    end
+
+    N3 --> O1 & O2 & O3
+        </div>
+    </div>
+
+    <script>
+        function downloadSVG() {
+            const svgElement = document.querySelector("#container svg");
+            if (!svgElement) return alert("Chưa vẽ xong sơ đồ, vui lòng chờ!");
+            
+            const svgString = new XMLSerializer().serializeToString(svgElement);
+            const svgBlob = new Blob([svgString], {type: "image/svg+xml;charset=utf-8"});
+            const svgUrl = URL.createObjectURL(svgBlob);
+            
+            const downloadLink = document.createElement("a");
+            downloadLink.href = svgUrl;
+            downloadLink.download = "so_do_thuat_toan_khsx_goc.svg";
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+        }
+
+        function downloadPNG() {
+            const svgElement = document.querySelector("#container svg");
+            if (!svgElement) return alert("Chưa vẽ xong sơ đồ, vui lòng chờ!");
+            
+            const svgString = new XMLSerializer().serializeToString(svgElement);
+            const svgBlob = new Blob([svgString], {type: "image/svg+xml;charset=utf-8"});
+            const svgUrl = URL.createObjectURL(svgBlob);
+            
+            const image = new Image();
+            image.onload = function() {
+                const canvas = document.createElement("canvas");
+                const scale = 3; // Nâng scale lên 3 để ảnh cực kỳ sắc nét khi zoom
+                canvas.width = svgElement.clientWidth * scale;
+                canvas.height = svgElement.clientHeight * scale;
+                
+                const context = canvas.getContext("2d");
+                context.fillStyle = "#1a1a1a";
+                context.fillRect(0, 0, canvas.width, canvas.height);
+                
+                context.scale(scale, scale);
+                context.drawImage(image, 0, 0);
+                
+                const pngUrl = canvas.toDataURL("image/png");
+                const downloadLink = document.createElement("a");
+                downloadLink.href = pngUrl;
+                downloadLink.download = "so_do_thuat_toan_khsx_goc.png";
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                document.body.removeChild(downloadLink);
+            };
+            image.src = svgUrl;
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>C.P. Bình Dương - Hệ Thống Lập Kế Hoạch Sản Xuất Tự Động</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="dark-theme">
+    
+    <!-- Main Layout Container -->
+    <div class="app-container">
+        
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <div class="brand-logo">
+                    <span class="logo-accent">C.P.</span>
+                    <span class="logo-text">Bình Dương</span>
+                </div>
+                <div class="brand-sub">KHSX AUTOMATOR</div>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <!-- SECTION 1: DATA OVERVIEW -->
+                <div class="nav-section-title">Tổng quan dữ liệu</div>
+                <ul class="nav-list">
+                    <li class="nav-item active" data-view="dashboard">
+                        <i data-lucide="layout-dashboard"></i>
+                        <span>Trạng thái & Tổng quan</span>
+                    </li>
+                    <li class="nav-item" data-view="data-forecast">
+                        <i data-lucide="trending-up"></i>
+                        <span>Kế hoạch bán (Forecast)</span>
+                    </li>
+                    <li class="nav-item" data-view="data-silo_plan">
+                        <i data-lucide="database"></i>
+                        <span>Kế hoạch Silo</span>
+                    </li>
+                    <li class="nav-item" data-view="data-bacang">
+                        <i data-lucide="container"></i>
+                        <span>Silo Bá Căng</span>
+                    </li>
+                    <li class="nav-item" data-view="data-ffstock">
+                        <i data-lucide="warehouse"></i>
+                        <span>Stock đầu ngày</span>
+                    </li>
+                    <li class="nav-item" data-view="data-tonbon">
+                        <i data-lucide="archive"></i>
+                        <span>Tồn bồn đóng bao</span>
+                    </li>
+                    <li class="nav-item" data-view="data-empty-bag">
+                        <i data-lucide="scroll"></i>
+                        <span>Kho bao bì rỗng</span>
+                    </li>
+                    <li class="nav-item" data-view="data-congsuat">
+                        <i data-lucide="sliders"></i>
+                        <span>Công suất & Specs</span>
+                    </li>
+                    <li class="nav-item" data-view="data-feedcode">
+                        <i data-lucide="git-fork"></i>
+                        <span>Định biên đóng bao</span>
+                    </li>
+                    <li class="nav-item" data-view="data-khangsinh">
+                        <i data-lucide="shield-alert"></i>
+                        <span>Cấu hình Kháng sinh</span>
+                    </li>
+                    <li class="nav-item" data-view="data-yesterday_plan">
+                        <i data-lucide="history"></i>
+                        <span>Kế hoạch hôm qua</span>
+                    </li>
+                    <li class="nav-item border-highlight" data-view="data-adjustments">
+                        <i data-lucide="edit-3"></i>
+                        <span>Điều chỉnh nhanh</span>
+                    </li>
+                </ul>
+                
+                <!-- SECTION 2: PRODUCTION PLAN -->
+                <div class="nav-section-title">Kế hoạch sản xuất</div>
+                <ul class="nav-list">
+                    <li class="nav-item text-highlight" data-view="plan-generator">
+                        <i data-lucide="cpu"></i>
+                        <span>Lập kế hoạch KHSX</span>
+                    </li>
+                    <li class="nav-item" data-view="plan-pellet-lines">
+                        <i data-lucide="milestone"></i>
+                        <span>Kế hoạch Pellet Line</span>
+                    </li>
+                    <li class="nav-item" data-view="plan-packaging">
+                        <i data-lucide="box"></i>
+                        <span>Kế hoạch Đóng bao</span>
+                    </li>
+                </ul>
+            </nav>
+            
+            <div class="sidebar-footer">
+                <div class="status-indicator online">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Đã kết nối Server</span>
+                </div>
+                <div class="copyright">v2.1 © C.P. Bình Dương</div>
+            </div>
+        </aside>
+        
+        <!-- Main Content Area -->
+        <main class="main-content">
+            
+            <!-- Topbar Header -->
+            <header class="top-bar">
+                <div class="page-title-container">
+                    <h1 id="view-title">Bảng Tổng Quan Hệ Thống</h1>
+                    <p id="view-subtitle" class="text-muted">Trạng thái 10 nguồn dữ liệu phục vụ lập kế hoạch</p>
+                </div>
+                
+                <div class="header-widgets">
+                    <button class="btn btn-success btn-premium-glow" id="btn-global-export-excel" style="display: none; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.875rem;">
+                        <i data-lucide="file-spreadsheet"></i> Xuất Excel KHSX
+                    </button>
+                    <div class="widget datetime-widget">
+                        <i data-lucide="calendar"></i>
+                        <span id="live-datetime">21-05-2026 10:00:00</span>
+                    </div>
+                </div>
+            </header>
+            
+            <!-- Dynamic Content Body -->
+            <div class="content-body">
+                
+                <!-- ========================================== -->
+                <!-- VIEW: DASHBOARD (MAIN OVERVIEW) -->
+                <!-- ========================================== -->
+                <section id="view-dashboard" class="view-panel active">
+                    <div class="dashboard-grid bento-grid">
+                        
+                        <!-- Main Stats Bento Card -->
+                        <div class="bento-card col-span-3 row-span-1 glass-card stats-overview-card" style="display: none;">
+                            <div class="card-header">
+                                <h2 class="card-title">Tổng quan hệ thống dữ liệu</h2>
+                                <span class="badge badge-success">Sẵn sàng</span>
+                            </div>
+                            <div class="stats-grid">
+                                <div class="stat-item">
+                                    <span class="stat-label">File Excel Đầu Vào</span>
+                                    <span class="stat-value" id="stat-excel-count">10 / 10</span>
+                                    <span class="stat-sub text-emerald">Đầy đủ dữ liệu</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Trạng thái Đồng bộ</span>
+                                    <span class="stat-value text-emerald" id="stat-sync-status">Tốt</span>
+                                    <span class="stat-sub text-muted">Cập nhật tự động</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Bản ghi Hệ thống</span>
+                                    <span class="stat-value" id="stat-record-count">--</span>
+                                    <span class="stat-sub text-muted">Dòng cấu hình</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Độ an toàn sinh học</span>
+                                    <span class="stat-value text-cyan">Tối Đa</span>
+                                    <span class="stat-sub text-muted">Cách ly kháng sinh</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Kế Hoạch Sản Xuất Tự Động Ngày Mục Tiêu Bento Card -->
+                        <div class="bento-card col-span-3 glass-card dashboard-plan-card" id="dashboard-plan-card" style="display: block; border-left: 4px solid var(--cyan);">
+                            <div class="card-header flex-between">
+                                <div class="header-left flex-center gap-2">
+                                    <span class="check-circle-icon"><i data-lucide="check-circle" class="text-emerald"></i></span>
+                                    <div>
+                                        <h2 class="card-title text-cyan" id="dashboard-plan-title">Kế Hoạch Sản Xuất Tự Động Ngày --</h2>
+                                        <p class="text-muted" id="dashboard-plan-filename">File KHSX đầu ra: --</p>
+                                    </div>
+                                </div>
+                                <div class="header-right">
+                                    <button class="btn btn-success btn-premium-glow" id="btn-dashboard-export-excel" style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.875rem;">
+                                        <i data-lucide="file-spreadsheet"></i> Xuất Excel KHSX
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- Sub-tabs navigation for Dashboard Plan Card -->
+                            <div class="dashboard-subtabs-nav">
+                                <button class="subtab-btn active" data-dashboard-tab="db-mixer-sequence">
+                                    <i data-lucide="list-ordered"></i> Trình tự Mixer
+                                </button>
+                                <button class="subtab-btn" data-dashboard-tab="db-pellet-lines">
+                                    <i data-lucide="layers"></i> Pellet Lines
+                                </button>
+                                <button class="subtab-btn" data-dashboard-tab="db-packaging-matrix">
+                                    <i data-lucide="box"></i> Kế hoạch Đóng bao
+                                </button>
+                            </div>
+                            
+                            <!-- Sub-tab Panels -->
+                            <!-- Panel 1: Mixer Sequence -->
+                            <div class="dashboard-subtab-panel active" id="db-mixer-sequence-panel">
+                                <div class="filter-bar mb-2">
+                                    <input type="text" id="mixer-search" placeholder="Tìm kiếm mã cám...">
+                                </div>
+
+                                <div class="table-scroll-container limit-height-medium" id="db-mixer-sequence-table-wrapper" style="display: none;">
+                                    <table class="premium-table compact">
+                                        <thead>
+                                            <tr>
+                                                <th style="width: 4%">Stt</th>
+                                                <th style="width: 10%">Mã cám</th>
+                                                <th style="width: 6%">KH mẻ</th>
+                                                <th style="width: 6%">Tổng tấn</th>
+                                                <th style="width: 20%">Quy cách &amp; Phân bổ tấn</th>
+                                                <th style="width: 5%">DOH</th>
+                                                <th style="width: 18%">Tình trạng kháng sinh</th>
+                                                <th style="width: 8%">Mixer Line</th>
+                                                <th>Line Đóng Bao</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="db-mixer-sequence-tbody">
+                                            <!-- Dynamic mixer sequences -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div id="dashboard-excel-plan-container" style="width: 100%;"></div>
+                            </div>
+                            
+                            <!-- Panel 2: Pellet Lines -->
+                            <div class="dashboard-subtab-panel" id="db-pellet-lines-panel" style="display: none;">
+                                <div class="pellet-grid bento-grid limit-height-medium scroll-y" id="db-pellet-lines-grid" style="gap: 1rem; padding: 0.5rem 0; width: 100%;">
+                                    <!-- Dynamic Pellet Lines Lane -->
+                                </div>
+                            </div>
+                            
+                            <!-- Panel 3: Packaging Matrix -->
+                            <div class="dashboard-subtab-panel" id="db-packaging-matrix-panel" style="display: none;">
+                                <div class="table-scroll-container limit-height-medium x-scrollable">
+                                    <table class="premium-table compact matrix-table">
+                                        <thead>
+                                            <tr class="header-super">
+                                                <th colspan="4" class="noborder">Thông tin cơ bản</th>
+                                                <th colspan="6" class="border-cp">Phân bổ bao bì Đại lý (Loại 25kg / 40kg)</th>
+                                                <th colspan="3" class="border-white">Phân bổ bao trắng Trại</th>
+                                            </tr>
+                                            <tr>
+                                                <th>Mã cám</th>
+                                                <th>Tổng Tấn</th>
+                                                <th>Quy cách</th>
+                                                <th>Line ép</th>
+                                                <th class="col-higro">HIGRO</th>
+                                                <th class="col-cp">C.P.</th>
+                                                <th class="col-star">STAR</th>
+                                                <th class="col-nuvo">NUVO</th>
+                                                <th class="col-nasa">NASA</th>
+                                                <th class="col-bell">BELL</th>
+                                                <th class="col-white">Trắng 25kg</th>
+                                                <th class="col-white">Trắng 40kg</th>
+                                                <th class="col-white">Trắng 50kg</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="db-packaging-matrix-tbody">
+                                            <!-- Dynamic matrix columns -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 10 Data Source Bento Grid (Dynamically rendered in main.js) -->
+                        <div class="col-span-3 grid-sources-container" style="display: none;">
+                            <h3 class="section-subtitle">10 Nguồn Dữ Liệu Đầu Vào</h3>
+                            <div class="sources-grid" id="sources-status-grid">
+                                <!-- Dynamic source cards will go here -->
+                                <div class="loading-spinner">Đang tải trạng thái file...</div>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </section>
+                
+                <!-- ========================================== -->
+                <!-- VIEW: TEMPLATE DATA TABLES (FORECAST -> YESTERDAY) -->
+                <!-- ========================================== -->
+                <section id="view-data-details" class="view-panel">
+                    <div class="details-layout glass-card">
+                        
+                        <div class="details-header flex-between">
+                            <div class="details-meta-info">
+                                <h2 id="details-title">Chi Tiết Nguồn Dữ Liệu</h2>
+                                <p id="details-subtitle" style="display:none; font-size: 0.78rem; color: var(--text-muted); margin: 2px 0 0; font-family: var(--font-mono); letter-spacing: 0.5px;"></p>
+                                <div class="file-badge-info">
+                                    <span class="file-name-label" id="details-filename">Tên file: --</span>
+                                    <span class="file-time-label" id="details-lastmod">Cập nhật: --</span>
+                                    <span class="file-size-label" id="details-filesize">Dung lượng: --</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Drag & Drop Uploader Component inside table detail -->
+                            <div class="upload-component flex-center">
+                                <form class="drag-drop-zone" id="detail-uploader-form">
+                                    <input type="file" id="detail-file-input" accept=".xlsx, .xls, .xlsm" hidden>
+                                    <div class="drop-zone-content">
+                                        <i data-lucide="upload-cloud" class="upload-icon"></i>
+                                        <span class="upload-text">Kéo thả hoặc click để Upload Excel mới</span>
+                                    </div>
+                                </form>
+                                <div class="upload-progress-bar" id="upload-progress-container" style="display: none;">
+                                    <div class="progress-fill" id="upload-progress-fill"></div>
+                                    <span class="progress-text" id="upload-progress-text">0%</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Table Filter and Export Section -->
+                        <div class="table-toolbar flex-between">
+                            <div class="search-box-container">
+                                <i data-lucide="search" class="search-icon"></i>
+                                <input type="text" id="table-search-input" placeholder="Tìm kiếm mã cám, thông tin...">
+                            </div>
+                            
+                            <div class="table-actions">
+                                <span class="row-counter" id="table-row-count">Đang tính dòng...</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Big Data Table Wrapper -->
+                        <div class="table-scroll-container">
+                            <table class="premium-table" id="detailed-data-table">
+                                <thead id="detailed-table-thead">
+                                    <!-- Dynamic headers -->
+                                </thead>
+                                <tbody id="detailed-table-tbody">
+                                    <!-- Dynamic data rows -->
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Simple Client Pagination -->
+                        <div class="table-pagination flex-between">
+                            <button class="btn btn-secondary btn-sm" id="btn-prev-page" disabled>
+                                <i data-lucide="chevron-left"></i> Trước
+                            </button>
+                            <span class="pagination-info" id="pagination-label">Trang 1 / 1</span>
+                            <button class="btn btn-secondary btn-sm" id="btn-next-page" disabled>
+                                Tiếp <i data-lucide="chevron-right"></i>
+                            </button>
+                        </div>
+                        
+                    </div>
+                </section>
+                
+                <!-- ========================================== -->
+                <!-- VIEW: DIEU_CHINH_NHANH (EDITABLE TABLES) -->
+                <!-- ========================================== -->
+                <section id="view-data-adjustments" class="view-panel">
+                    <div class="adjustments-container flex-column">
+                        
+                        <div class="glass-card page-action-bar flex-between">
+                            <div class="bar-left">
+                                <h2>Bảng Chỉnh Sửa Điều Chỉnh Nhanh</h2>
+                                <p class="text-muted">Cập nhật trực tiếp vào file cấu hình điều chỉnh `DIEU_CHINH_NHANH.xlsx` tại chỗ</p>
+                            </div>
+                            <div class="bar-right flex-center gap-2">
+                                <button class="btn btn-primary" id="btn-save-adjustments">
+                                    <i data-lucide="save"></i> Lưu và áp dụng vào Excel
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Adjustments Navigation Tabs -->
+                        <div class="adjust-tabs flex-center">
+                            <button class="adjust-tab active" data-tab="tab-additions">1. Thêm Đơn / Ép mẻ (THEM_MOI_HOAC_SUA)</button>
+                            <button class="adjust-tab" data-tab="tab-cancellations">2. Hủy Đơn KHSX (HUY_KHSX)</button>
+                            <button class="adjust-tab" data-tab="tab-substitutions">3. Thay Mã Cám (THAY_THE_MA_CAM)</button>
+                            <button class="adjust-tab" data-tab="tab-bag-substitutions">4. Thay Bao Bì (THAY_THE_BAO_BI)</button>
+                        </div>
+                        
+                        <!-- TAB CONTENTS -->
+                        <div class="tab-contents glass-card">
+                            
+                            <!-- TAB 1: ADDITIONS -->
+                            <div class="tab-panel active" id="tab-additions">
+                                <div class="table-title-desc flex-between">
+                                    <h3>Danh sách Đơn bổ sung hoặc Ép mẻ / Ép Tấn trên mẻ</h3>
+                                    <button class="btn btn-secondary btn-sm" id="btn-add-addition-row">
+                                        <i data-lucide="plus"></i> Thêm dòng mới
+                                    </button>
+                                </div>
+                                <div class="table-scroll-container limit-height">
+                                    <table class="premium-table editable-table" id="table-adjust-additions">
+                                        <thead>
+                                            <tr>
+                                                <th style="width: 15%">Mã cám</th>
+                                                <th style="width: 12%">Tấn</th>
+                                                <th style="width: 15%">Quy cách</th>
+                                                <th style="width: 15%">Loại ưu tiên</th>
+                                                <th style="width: 12%">Ép số mẻ (Tuỳ chọn)</th>
+                                                <th style="width: 12%">Tấn/Mẻ (Tuỳ chọn)</th>
+                                                <th>Ghi chú</th>
+                                                <th style="width: 8%">Xoá</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <!-- Dynamic editable rows -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            
+                            <!-- TAB 2: CANCELLATIONS -->
+                            <div class="tab-panel" id="tab-cancellations">
+                                <div class="table-title-desc flex-between">
+                                    <h3>Danh sách Mã Cám Hủy Sản Xuất</h3>
+                                    <button class="btn btn-secondary btn-sm" id="btn-add-cancellation-row">
+                                        <i data-lucide="plus"></i> Thêm dòng mới
+                                    </button>
+                                </div>
+                                <div class="table-scroll-container limit-height">
+                                    <table class="premium-table editable-table" id="table-adjust-cancellations">
+                                        <thead>
+                                            <tr>
+                                                <th style="width: 30%">Mã cám cần hủy</th>
+                                                <th style="width: 30%">Loại hủy (HỦY HẾT / HỦY BAO / HỦY SILO)</th>
+                                                <th>Ghi chú</th>
+                                                <th style="width: 10%">Xoá</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <!-- Dynamic editable rows -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            
+                            <!-- TAB 3: SUBSTITUTIONS -->
+                            <div class="tab-panel" id="tab-substitutions">
+                                <div class="table-title-desc flex-between">
+                                    <h3>Danh sách Chuyển Đổi Mã Cám (Từ mã cũ sang mã mới)</h3>
+                                    <button class="btn btn-secondary btn-sm" id="btn-add-substitution-row">
+                                        <i data-lucide="plus"></i> Thêm dòng mới
+                                    </button>
+                                </div>
+                                <div class="table-scroll-container limit-height">
+                                    <table class="premium-table editable-table" id="table-adjust-substitutions">
+                                        <thead>
+                                            <tr>
+                                                <th style="width: 30%">Mã cám cũ</th>
+                                                <th style="width: 30%">Mã cám mới thay thế</th>
+                                                <th>Ghi chú</th>
+                                                <th style="width: 10%">Xoá</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <!-- Dynamic editable rows -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            
+                            <!-- TAB 4: BAG SUBSTITUTIONS -->
+                            <div class="tab-panel" id="tab-bag-substitutions">
+                                <div class="table-title-desc flex-between">
+                                    <h3>Danh sách Thay Thế Bao Bì Đóng Bao (Cấu hình riêng cho sản phẩm)</h3>
+                                    <button class="btn btn-secondary btn-sm" id="btn-add-bag-sub-row">
+                                        <i data-lucide="plus"></i> Thêm dòng mới
+                                    </button>
+                                </div>
+                                <div class="table-scroll-container limit-height">
+                                    <table class="premium-table editable-table" id="table-adjust-bag-subs">
+                                        <thead>
+                                            <tr>
+                                                <th style="width: 25%">Mã cám</th>
+                                                <th style="width: 25%">Mã bao gốc cần thay</th>
+                                                <th style="width: 25%">Mã bao mới thay thế</th>
+                                                <th>Ghi chú</th>
+                                                <th style="width: 10%">Xoá</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <!-- Dynamic editable rows -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- ========================================== -->
+                <!-- VIEW: LẬP KHOẠCH KHSX (ENGINE CALCULATION) -->
+                <!-- ========================================== -->
+                <section id="view-plan-generator" class="view-panel">
+                    <div class="plan-generator-layout bento-grid">
+                        
+                        <!-- Left Control Bento: Configuration -->
+                        <div class="bento-card col-span-3 glass-card flex-column gap-3 plan-controls-card">
+                            <h3 class="card-title"><i data-lucide="settings" class="inline-icon"></i> Thông số chạy kế hoạch</h3>
+                            
+                            <div class="input-group">
+                                <label for="plan-target-date">Chọn Ngày Cần Lập Kế Hoạch</label>
+                                <input type="date" id="plan-target-date" class="form-control">
+                            </div>
+                            
+                            <!-- Dynamic Walkin Orders Section -->
+                            <div class="walkin-orders-section flex-column gap-2">
+                                <div class="flex-between">
+                                    <label>Đơn Vãng Lai / Bổ Sung Gấp</label>
+                                    <button class="btn btn-secondary btn-xs" id="btn-add-walkin-row">
+                                        <i data-lucide="plus-circle"></i> Thêm đơn
+                                    </button>
+                                </div>
+                                
+                                <div class="walkin-list-container scroll-y" id="walkin-orders-list">
+                                    <!-- Dynamic walkin rows -->
+                                    <div class="no-walkin-label text-muted text-center py-3">
+                                        Chưa thêm đơn vãng lai
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <button class="btn btn-success btn-block py-3 mt-auto font-lg" id="btn-run-solver">
+                                <i data-lucide="play" class="spinner-hidden"></i>
+                                <span class="spinner-shown" style="display:none;"><i class="loading-icon animate-spin"></i> Đang tính toán...</span>
+                                BẮT ĐẦU TÍNH KHSX TỰ ĐỘNG
+                            </button>
+                        </div>
+                        
+                        <!-- Right Control Bento: Realtime stream logs -->
+                        <div class="bento-card col-span-2 glass-card flex-column gap-2 plan-terminal-card" style="display: none;">
+                            <div class="card-header flex-between">
+                                <h3 class="card-title text-cyan"><i data-lucide="terminal" class="inline-icon"></i> Log Console Tiễn Trình Thời Gian Thực</h3>
+                                <button class="btn btn-secondary btn-xs" id="btn-clear-terminal">Xoá log</button>
+                            </div>
+                            <div class="terminal-body" id="plan-terminal-console">
+                                <div class="terminal-line text-muted">> Hệ thống đã sẵn sàng lập kế hoạch. Vui lòng chọn ngày và click "Bắt đầu tính toán"...</div>
+                            </div>
+                        </div>
+
+
+                        <!-- BẢNG KẾ HOẠCH SẢN XUẤT GIỐNG EXCEL (FULL WIDTH) -->
+                        <div id="production-plan-container" class="col-span-3" style="width: 100%;">
+                            <!-- Bảng KHSX Excel-style sẽ được render bởi JS -->
+                        </div>
+
+                        
+                    </div>
+                </section>
+                
+                <!-- ========================================== -->
+                <!-- VIEW: KẾ HOẠCH PELLET LINE TIMELINE -->
+                <!-- ========================================== -->
+                <section id="view-plan-pellet-lines" class="view-panel">
+                    <div class="pellet-lines-container flex-column gap-3">
+                        <div class="glass-card page-action-bar flex-between">
+                            <div class="bar-left">
+                                <h2>Kế Hoạch Ép Viên Cho Từng Pellet Line & Mash</h2>
+                                <p class="text-muted" id="pl-meta-info">Chọn ngày chạy và lập kế hoạch để xem lịch phân bổ chi tiết</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Main Timeline Bento Grid -->
+                        <div class="pellet-grid bento-grid" id="pellet-lines-main-grid">
+                            <!-- Dynamically generated in main.js -->
+                            <div class="bento-card col-span-3 glass-card py-5 text-center">
+                                <i data-lucide="info" class="text-muted" style="width:48px; height:48px;"></i>
+                                <h3 class="mt-2 text-muted">Vui lòng lập kế hoạch hoặc xem chi tiết một ngày chạy kế hoạch để trực quan hóa lịch Pellet Line.</h3>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- ========================================== -->
+                <!-- VIEW: KẾ HOẠCH ĐÔNG BAO (PACKAGING MATRIX) -->
+                <!-- ========================================== -->
+                <section id="view-plan-packaging" class="view-panel">
+                    <div class="packaging-container flex-column gap-3">
+                        <div class="glass-card page-action-bar flex-between">
+                            <div class="bar-left">
+                                <h2>Ma Trận Phân Bổ Bao Bì Đại Lý & Trại</h2>
+                                <p class="text-muted">Cập nhật phân bổ bao bì thương hiệu (HIGRO, CP, STAR, NUVO, NASA, BELL) và bao trắng 50kg</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Matrix Board -->
+                        <div class="glass-card matrix-card">
+                            <div class="table-scroll-container x-scrollable">
+                                <table class="premium-table compact matrix-table">
+                                    <thead>
+                                        <tr class="header-super">
+                                            <th colspan="4" class="noborder">Thông tin cơ bản</th>
+                                            <th colspan="6" class="border-cp">Phân bổ bao bì Đại lý (Loại 25kg / 40kg)</th>
+                                            <th colspan="3" class="border-white">Phân bổ bao trắng Trại</th>
+                                        </tr>
+                                        <tr>
+                                            <th>Mã cám</th>
+                                            <th>Tổng Tấn</th>
+                                            <th>Quy cách</th>
+                                            <th>Line ép</th>
+                                            
+                                            <!-- CP Brand Bag Columns -->
+                                            <th class="col-higro">HIGRO</th>
+                                            <th class="col-cp">C.P.</th>
+                                            <th class="col-star">STAR</th>
+                                            <th class="col-nuvo">NUVO</th>
+                                            <th class="col-nasa">NASA</th>
+                                            <th class="col-bell">BELL</th>
+                                            
+                                            <!-- White Farm Bag Columns -->
+                                            <th class="col-white">Trắng 25kg</th>
+                                            <th class="col-white">Trắng 40kg</th>
+                                            <th class="col-white">Trắng 50kg</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="packaging-matrix-tbody">
+                                        <!-- Dynamic matrix columns -->
+                                        <tr>
+                                            <td colspan="13" class="text-center py-5 text-muted">
+                                                Vui lòng lập kế hoạch hoặc xem chi tiết một ngày chạy để hiển thị ma trận phân bổ bao bì.
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                
+            </div>
+            
+        </main>
+        
+    </div>
+    
+    <!-- JavaScript File -->
+    <script src="/static/js/main.js"></script>
+</body>
+</html>

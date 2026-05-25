@@ -1,0 +1,33 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C.P. Excel & PowerPoint files (Excluded as requested)
+*.xlsx
+*.xlsm
+*.xls
+*.pptx
+*.ppt
+
+# Local output & temp folders
+output/
+temp_uploads/
+*.log
+temp_load_all_data.txt
+comparison_output.txt
+comparison_output_utf8.txt
+
+# Scratch scripts (agent-created helper files)
+scratch_*.py
+scratch_*.txt
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
