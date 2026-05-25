@@ -54,3 +54,9 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 USE_POSTGRESQL = True
 DB_URI = os.environ.get('DATABASE_URL') or os.environ.get('DB_URI') or "postgresql://neondb_owner:npg_ITvYDxe34qWl@ep-ancient-waterfall-aonnt7nf-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
 
+# ============================================
+# CẤU HÌNH TÀI KHOẢN ADMIN ĐĂNG NHẬP APP
+# ============================================
+ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'cp@123456')
+

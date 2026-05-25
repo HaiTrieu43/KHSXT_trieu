@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 import json
 import traceback
-from flask import Flask, render_template, jsonify, request, send_from_directory, Response
+from flask import Flask, render_template, jsonify, request, send_from_directory, Response, session, redirect, url_for
 
 # Fix encoding cho Windows console
 if sys.platform == 'win32':
@@ -91,6 +91,48 @@ def _safe_int_val(v):
         return int(float(v))
     except:
         return v
+
+
+# ============================================================
+# XÁC THỰC NGƯỜI DÙNG (USER AUTHENTICATION)
+# ============================================================
+
+@app.before_request
+def require_login():
+    """Tự động bảo vệ tất cả các endpoints, yêu cầu đăng nhập"""
+    # Các endpoint được truy cập tự do không cần đăng nhập
+    allowed_endpoints = ['login', 'static']
+    if request.endpoint and request.endpoint not in allowed_endpoints:
+        # Bỏ qua kiểm tra favicon
+        if request.path == '/favicon.ico':
+            return
+        if not session.get('logged_in'):
+            return redirect(url_for('login'))
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Giao diện đăng nhập Admin"""
+    error = None
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        
+        if username == getattr(config, 'ADMIN_USERNAME', 'admin') and password == getattr(config, 'ADMIN_PASSWORD', 'cp@123456'):
+            session['logged_in'] = True
+            session['username'] = username
+            return redirect(url_for('index'))
+        else:
+            error = 'Tên đăng nhập hoặc mật khẩu không chính xác!'
+            
+    return render_template('login.html', error=error)
+
+
+@app.route('/logout')
+def logout():
+    """Đăng xuất người dùng, xóa session"""
+    session.clear()
+    return redirect(url_for('login'))
 
 
 # ============================================================
