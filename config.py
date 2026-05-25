@@ -49,8 +49,8 @@ OUTPUT_DIR = os.path.join(DATA_DIR, 'laptrinh vao', 'output')
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # ============================================
-# CẤU HÌNG DATABASE CLOUD (NEON TECH)
+# CẤU HÌNH DATABASE CLOUD (NEON TECH)
 # ============================================
 USE_POSTGRESQL = True
-DB_URI = "postgresql://neondb_owner:npg_ITvYDxe34qWl@ep-ancient-waterfall-aonnt7nf-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+DB_URI = os.environ.get('DATABASE_URL') or os.environ.get('DB_URI') or "postgresql://neondb_owner:npg_ITvYDxe34qWl@ep-ancient-waterfall-aonnt7nf-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
 
