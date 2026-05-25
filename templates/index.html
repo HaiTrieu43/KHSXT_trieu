@@ -5,6 +5,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>C.P. Bình Dương - Hệ Thống Lập Kế Hoạch Sản Xuất Tự Động</title>
     
+    <!-- Safety and Fail-safe scripts -->
+    <script>
+        // 1. Kiểm tra mở file trực tiếp từ ổ cứng (file:///)
+        if (window.location.protocol === 'file:') {
+            alert('⚠️ CẢNH BÁO: Bạn đang mở trang web trực tiếp từ file HTML trên ổ đĩa!\n\nVui lòng nhấp đúp chuột chạy tệp "run_web.bat" để khởi động máy chủ Web, sau đó hệ thống sẽ tự động mở địa chỉ http://127.0.0.1:5000 trên trình duyệt để kết nối cơ sở dữ liệu Cloud Neon Tech.');
+        }
+
+        // 2. Intercept fetch để tự động chuyển hướng về trang đăng nhập khi session hết hạn hoặc chưa đăng nhập
+        const originalFetch = window.fetch;
+        window.fetch = async function(...args) {
+            try {
+                const response = await originalFetch(...args);
+                // Nếu trình duyệt tự động đi theo redirect và trỏ tới trang login
+                if (response.redirected && response.url.includes('/login')) {
+                    window.location.href = '/login';
+                    return new Promise(() => {}); // Trả về Promise treo để tránh lỗi JSON.parse() ở các dòng tiếp theo
+                }
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return new Promise(() => {});
+                }
+                return response;
+            } catch (err) {
+                console.error("Fetch Error:", err);
+                throw err;
+            }
+        };
+    </script>
+    
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
