@@ -137,7 +137,10 @@ def healthz():
             status["error"] = str(e)
             return jsonify(status), 500
             
-    return jsonify(status), 200
+@app.route('/favicon.ico')
+def favicon():
+    """Trả về phản hồi trống cho favicon để tránh cảnh báo lỗi 404 trên console trình duyệt"""
+    return '', 204
 
 
 @app.route('/login', methods=['GET', 'POST'])
