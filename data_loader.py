@@ -1054,11 +1054,18 @@ def load_empty_bag(file_path: str) -> dict:
                         active_brand = brand
                         break
 
-            # Cột B (index 1) hoặc Cột C (index 2) = tên sản phẩm
+            # Cột B (index 1) = mã sản phẩm/mã SAP, Cột C (index 2) = tên bao bì chứa mã sản phẩm
             # Tìm mã sản phẩm (số + chữ, VD: 552, 550S, HT12S)
+            cell_c = _safe_str(row[2].value) if len(row) > 2 else ''
             product_raw = cell_b
-            if not product_raw or product_raw.startswith('1') and len(product_raw) > 8:
-                # Bỏ qua mã SAP dài (VD: 1290D203010025)
+            if not product_raw:
+                continue
+                
+            # Nếu cột B là mã SAP dài (VD: 1290D203010025), ta chuyển sang cột C để trích xuất mã sản phẩm
+            if product_raw.startswith('1') and len(product_raw) > 8:
+                product_raw = cell_c
+                
+            if not product_raw:
                 continue
 
             # Bỏ qua header/tổng

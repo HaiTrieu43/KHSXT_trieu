@@ -69,13 +69,15 @@ ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', '123456')
 
 ONEDRIVE_BASE_DIR = r'C:\Users\haitr\OneDrive - Cong Ty Co Phan Chan Nuoi C.P. Viet Nam'
 
-def _find_onedrive_shortcut(base_dir, keyword):
-    """Tìm thư mục OneDrive shortcut chứa keyword (không phân biệt hoa/thường, bỏ dấu).
+def _find_onedrive_shortcut(base_dir, category):
+    """Tìm thư mục OneDrive shortcut dựa trên phân tích nội dung đặc trưng (thông minh).
     
-    OneDrive tạo shortcut với tên có dấu VN (VD: 'CPV Document - NĂM 2026').
-    Dùng Unicode NFKD normalize để bỏ dấu trước khi so sánh.
+    OneDrive có thể tự động đổi tên các shortcut trùng lặp (ví dụ: 'CPV Document - NĂM 2026' 
+    và 'CPV Document - NĂM 2026 1'). Vì vậy, phương pháp tốt nhất là quét bên trong 
+    thư mục để nhận diện đặc trưng của từng loại báo cáo.
     """
     import unicodedata
+    import glob
     
     def _strip_accents(s):
         nfkd = unicodedata.normalize('NFKD', s.lower())
@@ -83,27 +85,70 @@ def _find_onedrive_shortcut(base_dir, keyword):
     
     if not os.path.isdir(base_dir):
         return ''
+        
+    for name in os.listdir(base_dir):
+        full = os.path.join(base_dir, name)
+        if not os.path.isdir(full):
+            continue
+            
+        if category == 'ffstock':
+            # Thư mục FFStock chứa file/thư mục chứa từ khóa "FFSTOCK"
+            matches = glob.glob(os.path.join(full, '**', '*FFSTOCK*'), recursive=True)
+            if matches:
+                # Phải chứa định dạng thư mục con theo tháng (ví dụ: "FFSTOCK THÁNG")
+                matches_ascii = [_strip_accents(m) for m in matches]
+                if any('ffstock thang' in m for m in matches_ascii):
+                    return full
+                    
+        elif category == 'empty_bag':
+            # Thư mục vỏ bao bì chứa file có tên "EMPTY BAG"
+            matches = glob.glob(os.path.join(full, '**', '*EMPTY BAG*'), recursive=True)
+            if matches:
+                return full
+                
+        elif category == 'forecast':
+            # Thư mục sale packing/forecast chứa file hoặc tên thư mục chứa chữ "forecast" hoặc "sale packing"
+            matches = glob.glob(os.path.join(full, '**', '*FORECAST*'), recursive=True)
+            if matches or 'sale packing' in name.lower():
+                return full
+                
+        elif category == 'tonbon':
+            # Thư mục tồn bồn chứa file/thư mục có tên "ton bon" hoặc "ton bin"
+            matches = glob.glob(os.path.join(full, '**', '*ton bon*'), recursive=True)
+            matches2 = glob.glob(os.path.join(full, '**', '*ton bin*'), recursive=True)
+            if matches or matches2 or 'ton bin' in _strip_accents(name) or 'ton bon' in _strip_accents(name):
+                return full
+                
+    # Fallback dự phòng: dùng keyword cơ bản nếu không tìm ra theo cấu trúc
+    keyword_map = {
+        'ffstock': 'NAM 2026',
+        'empty_bag': 'BAO BI',
+        'forecast': 'sale packing',
+        'tonbon': 'TON BIN'
+    }
+    keyword = keyword_map.get(category, '')
+    if not keyword:
+        return ''
+        
     keyword_ascii = _strip_accents(keyword)
     for name in os.listdir(base_dir):
         full = os.path.join(base_dir, name)
         if os.path.isdir(full) and keyword_ascii in _strip_accents(name):
             return full
+            
     return ''
 
 # --- FFStock (Tồn kho thành phẩm hàng ngày) ---
-# Thực tế: CPV Document - NAM 2026\FFSTOCK THANG 05-2026\FFSTOCK 22-05-2026.xlsm
-# Shortcut chứa keyword "NAM 2026" thuộc mục BÁO CÁO TỒN KHO CÁM
-ONEDRIVE_FFSTOCK_DIR = _find_onedrive_shortcut(ONEDRIVE_BASE_DIR, 'NAM 2026')
+ONEDRIVE_FFSTOCK_DIR = _find_onedrive_shortcut(ONEDRIVE_BASE_DIR, 'ffstock')
 
 # --- Empty Bag (Bao bì hàng ngày) ---  
-# Sẽ có shortcut riêng sau khi sync, chứa keyword tương ứng
-ONEDRIVE_EMPTY_BAG_DIR = _find_onedrive_shortcut(ONEDRIVE_BASE_DIR, 'BAO BI')
+ONEDRIVE_EMPTY_BAG_DIR = _find_onedrive_shortcut(ONEDRIVE_BASE_DIR, 'empty_bag')
 
 # --- Sale Packing Daily (Forecast) ---
-ONEDRIVE_FORECAST_DIR = _find_onedrive_shortcut(ONEDRIVE_BASE_DIR, 'sale packing')
+ONEDRIVE_FORECAST_DIR = _find_onedrive_shortcut(ONEDRIVE_BASE_DIR, 'forecast')
 
 # --- Tồn Bồn (Bin Report) ---
-ONEDRIVE_TONBON_DIR = _find_onedrive_shortcut(ONEDRIVE_BASE_DIR, 'TON BIN')
+ONEDRIVE_TONBON_DIR = _find_onedrive_shortcut(ONEDRIVE_BASE_DIR, 'tonbon')
 
 def _pick_dir(onedrive_dir, fallback_dir):
     """Ưu tiên thư mục OneDrive nếu tồn tại, nếu không dùng fallback."""
