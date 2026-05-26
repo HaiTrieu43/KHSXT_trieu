@@ -218,7 +218,7 @@ def _open_workbook(file_path: str, data_only=True, read_only=True):
 
 def _get_sheet(wb, sheet_name=None):
     """
-    Lấy sheet theo tên. Nếu không chỉ định, trả về sheet hợp lệ cuối cùng.
+    Lấy sheet theo tên. Nếu không chỉ định, tìm sheet tuần mới nhất một cách thông minh.
     Trả về (sheet, tên_sheet) hoặc (None, None).
     """
     if sheet_name:
@@ -232,14 +232,37 @@ def _get_sheet(wb, sheet_name=None):
         print(f"  ⚠️  Không tìm thấy sheet: {sheet_name}")
         return None, None
     else:
-        # Trả về sheet hợp lệ cuối cùng (bắt đầu bằng W hoặc w kèm chữ số)
-        # Tránh các sheet trống tự tạo như 'Sheet1' ở cuối
-        target_name = wb.sheetnames[-1]
-        for name in reversed(wb.sheetnames):
-            clean_name = name.strip()
-            if clean_name.upper().startswith('W') and len(clean_name) > 1 and clean_name[1].isdigit():
-                target_name = name
-                break
+        # Tìm sheet tuần mới nhất một cách thông minh hỗ trợ cả tiếng Anh (W1) và tiếng Việt (TUẦN 1)
+        import re
+        
+        valid_sheets = []
+        for idx, name in enumerate(wb.sheetnames):
+            clean = name.strip().upper()
+            # Khớp định dạng bắt đầu bằng W, TUẦN, TUAN, hoặc T kèm chữ số
+            match = re.search(r'^(?:W|TUÂN|TUẦN|T)\s*(\d+)', clean)
+            if match:
+                # Bỏ qua các sheet phụ có ký tự đặc biệt như @, #, $, % ở cuối
+                if not any(char in name for char in ['@', '#', '$', '%']):
+                    valid_sheets.append((idx, name, int(match.group(1))))
+                    
+        if not valid_sheets:
+            # Fallback về sheet cuối cùng
+            name = wb.sheetnames[-1]
+            return wb[name], name
+            
+        # Xác định chiều sắp xếp tăng dần hay giảm dần
+        if len(valid_sheets) >= 2:
+            first_name, first_wn = valid_sheets[0][1], valid_sheets[0][2]
+            last_name, last_wn = valid_sheets[-1][1], valid_sheets[-1][2]
+            
+            # Nếu số tuần đầu tiên lớn hơn số tuần cuối cùng, đó là giảm dần (mới nhất ở đầu)
+            if first_wn > last_wn:
+                target_name = first_name
+            else:
+                target_name = last_name
+        else:
+            target_name = valid_sheets[0][1]
+            
         return wb[target_name], target_name
 
 
