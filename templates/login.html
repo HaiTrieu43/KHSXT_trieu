@@ -165,15 +165,17 @@
 
         .input-wrapper {
             position: relative;
-            display: flex;
-            align-items: center;
+            width: 100%;
         }
 
-        .input-wrapper i {
+        .input-wrapper i,
+        .input-wrapper svg {
             position: absolute;
             left: 1.25rem;
+            top: 50%;
+            transform: translateY(-50%);
             color: var(--text-muted);
-            transition: color 0.3s;
+            transition: all 0.3s ease;
             pointer-events: none;
         }
 
@@ -196,8 +198,10 @@
             box-shadow: 0 0 0 4px var(--glow-color);
         }
 
-        .form-input:focus + i {
+        .form-input:focus ~ i,
+        .form-input:focus ~ svg {
             color: #3b82f6;
+            stroke: #3b82f6;
         }
 
         /* Error Alert */
