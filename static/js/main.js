@@ -189,8 +189,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // 4. NAVIGATION SYSTEM (SPA ROUTER)
     // ----------------------------------------------------------------------
     elements.sidebarItems.forEach(item => {
-        item.addEventListener('click', () => {
+        item.addEventListener('click', (e) => {
+            const isStub = item.getAttribute('data-stub') === 'true';
+            if (isStub) {
+                const stubTitle = item.getAttribute('data-stub-title') || item.querySelector('span')?.textContent || 'Tính năng';
+                showToast(`✨ Tính năng "${stubTitle}" đang được phát triển!`, 'warning');
+                return;
+            }
+
             const targetView = item.getAttribute('data-view');
+            if (!targetView) return;
             
             // Handle active classes on sidebar
             elements.sidebarItems.forEach(i => i.classList.remove('active'));
@@ -211,6 +219,25 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    // Accordion logic for grouped dropdown menus
+    document.querySelectorAll('.nav-group-header').forEach(header => {
+        header.addEventListener('click', () => {
+            const group = header.closest('.nav-group');
+            if (!group) return;
+            
+            const isExpanded = group.classList.contains('expanded');
+            
+            // Collapse all other groups first (Accordion mode)
+            document.querySelectorAll('.nav-group').forEach(g => {
+                if (g !== group) g.classList.remove('expanded');
+            });
+            
+            // Toggle current group
+            group.classList.toggle('expanded', !isExpanded);
+        });
+    });
+
 
     // Category SharePoint Sync button event
     if (elements.sharepointSyncBtn) {
@@ -348,7 +375,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Highlight sidebar
                 elements.sidebarItems.forEach(i => i.classList.remove('active'));
                 const sidebarItem = document.querySelector(`.nav-item[data-view="data-${cat}"]`);
-                if (sidebarItem) sidebarItem.classList.add('active');
+                if (sidebarItem) {
+                    sidebarItem.classList.add('active');
+                    const parentGroup = sidebarItem.closest('.nav-group');
+                    if (parentGroup) {
+                        document.querySelectorAll('.nav-group').forEach(g => {
+                            if (g !== parentGroup) g.classList.remove('expanded');
+                        });
+                        parentGroup.classList.add('expanded');
+                    }
+                }
             });
             
             elements.sourcesStatusGrid.appendChild(card);

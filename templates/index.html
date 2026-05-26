@@ -64,77 +64,142 @@
             </div>
             
             <nav class="sidebar-nav">
-                <!-- SECTION 1: DATA OVERVIEW -->
-                <div class="nav-section-title">Tổng quan dữ liệu</div>
-                <ul class="nav-list">
-                    <li class="nav-item active" data-view="dashboard">
+                <ul class="nav-menu">
+                    <!-- DASHBOARD FLAT LINK -->
+                    <li class="nav-item flat-nav-item active" data-view="dashboard" style="margin-bottom: 0.5rem;">
                         <i data-lucide="layout-dashboard"></i>
                         <span>Trạng thái & Tổng quan</span>
                     </li>
-                    <li class="nav-item" data-view="data-forecast">
-                        <i data-lucide="trending-up"></i>
-                        <span>Kế hoạch bán (Forecast)</span>
+                    
+                    <!-- GROUP 1: KẾ HOẠCH SẢN XUẤT -->
+                    <li class="nav-group expanded">
+                        <div class="nav-group-header">
+                            <div class="header-content">
+                                <i data-lucide="calendar"></i>
+                                <span>Kế hoạch sản xuất</span>
+                            </div>
+                            <i data-lucide="chevron-down" class="group-chevron"></i>
+                        </div>
+                        <ul class="nav-submenu">
+                            <li class="nav-item submenu-item" data-view="plan-generator">
+                                <span>Kế hoạch sản xuất</span>
+                            </li>
+                            <li class="nav-item submenu-item" data-view="plan-pellet-lines">
+                                <span>Kế hoạch PL</span>
+                            </li>
+                            <li class="nav-item submenu-item" data-view="plan-packaging">
+                                <span>Kế hoạch đóng bao</span>
+                            </li>
+                        </ul>
                     </li>
-                    <li class="nav-item" data-view="data-silo_plan">
-                        <i data-lucide="database"></i>
-                        <span>Kế hoạch Silo</span>
+
+                    <!-- GROUP 2: DỮ LIỆU ĐẦU VÀO -->
+                    <li class="nav-group">
+                        <div class="nav-group-header">
+                            <div class="header-content">
+                                <i data-lucide="database"></i>
+                                <span>Dữ liệu đầu vào</span>
+                            </div>
+                            <i data-lucide="chevron-down" class="group-chevron"></i>
+                        </div>
+                        <ul class="nav-submenu">
+                            <li class="nav-item submenu-item" data-view="data-silo_plan">
+                                <span>Đặt hàng</span>
+                            </li>
+                            <li class="nav-item submenu-item" data-view="data-forecast">
+                                <span>Dự báo bán hàng</span>
+                            </li>
+                            <li class="nav-item submenu-item" data-view="data-congsuat">
+                                <span>Sản phẩm</span>
+                            </li>
+                            <li class="nav-item submenu-item" data-stub="true" data-stub-title="Lịch tháng">
+                                <span>Lịch tháng</span>
+                            </li>
+                        </ul>
                     </li>
-                    <li class="nav-item" data-view="data-bacang">
-                        <i data-lucide="container"></i>
-                        <span>Silo Bá Căng</span>
+
+                    <!-- GROUP 3: QUẢN LÝ KHO -->
+                    <li class="nav-group">
+                        <div class="nav-group-header">
+                            <div class="header-content">
+                                <i data-lucide="box"></i>
+                                <span>Quản lý kho</span>
+                            </div>
+                            <i data-lucide="chevron-down" class="group-chevron"></i>
+                        </div>
+                        <ul class="nav-submenu">
+                            <li class="nav-item submenu-item" data-view="data-tonbon">
+                                <span>Tồn bồn</span>
+                            </li>
+                            <li class="nav-item submenu-item" data-view="data-empty_bag">
+                                <span>Tồn bao bì</span>
+                            </li>
+                            <li class="nav-item submenu-item" data-view="data-yesterday_plan">
+                                <span>Tồn kho cám cũ</span>
+                            </li>
+                            <li class="nav-item submenu-item" data-view="data-ffstock">
+                                <span>Tồn kho hôm nay</span>
+                            </li>
+                        </ul>
                     </li>
-                    <li class="nav-item" data-view="data-ffstock">
-                        <i data-lucide="warehouse"></i>
-                        <span>Stock đầu ngày</span>
+
+                    <!-- GROUP 4: SẢN XUẤT & VẬN HÀNH -->
+                    <li class="nav-group">
+                        <div class="nav-group-header">
+                            <div class="header-content">
+                                <i data-lucide="settings"></i>
+                                <span>Sản xuất & Vận hành</span>
+                            </div>
+                            <i data-lucide="chevron-down" class="group-chevron"></i>
+                        </div>
+                        <ul class="nav-submenu">
+                            <li class="nav-item submenu-item" data-stub="true" data-stub-title="Lập phối trộn (Batching)">
+                                <span>Lập phối trộn (Batching)</span>
+                            </li>
+                            <li class="nav-item submenu-item" data-stub="true" data-stub-title="Đóng bao (Packing)">
+                                <span>Đóng bao (Packing)</span>
+                            </li>
+                            <li class="nav-item submenu-item" data-view="data-adjustments">
+                                <span>Nhập dữ liệu Email</span>
+                            </li>
+                        </ul>
                     </li>
-                    <li class="nav-item" data-view="data-tonbon">
-                        <i data-lucide="archive"></i>
-                        <span>Tồn bồn đóng bao</span>
+
+                    <!-- FLAT LINK: GHI CHÚ -->
+                    <li class="nav-item flat-nav-item" data-stub="true" data-stub-title="Ghi chú" style="margin-top: 0.25rem; margin-bottom: 0.25rem;">
+                        <i data-lucide="file-text"></i>
+                        <span>Ghi chú</span>
                     </li>
-                    <li class="nav-item" data-view="data-empty_bag">
-                        <i data-lucide="scroll"></i>
-                        <span>Kho bao bì rỗng</span>
+
+                    <!-- GROUP 5: ADMIN KDE -->
+                    <li class="nav-group">
+                        <div class="nav-group-header">
+                            <div class="header-content">
+                                <i data-lucide="user-check"></i>
+                                <span>Admin KDE</span>
+                            </div>
+                            <i data-lucide="chevron-down" class="group-chevron"></i>
+                        </div>
+                        <ul class="nav-submenu">
+                            <li class="nav-item submenu-item" data-stub="true" data-stub-title="Tạo bảng">
+                                <span>Tạo bảng</span>
+                            </li>
+                            <li class="nav-item submenu-item" data-stub="true" data-stub-title="Thêm users">
+                                <span>Thêm users</span>
+                            </li>
+                            <li class="nav-item submenu-item" data-stub="true" data-stub-title="Vai trò">
+                                <span>Vai trò</span>
+                            </li>
+                            <li class="nav-item submenu-item" data-stub="true" data-stub-title="Cài đặt">
+                                <span>Cài đặt</span>
+                            </li>
+                        </ul>
                     </li>
-                    <li class="nav-item" data-view="data-congsuat">
-                        <i data-lucide="sliders"></i>
-                        <span>Công suất & Specs</span>
-                    </li>
-                    <li class="nav-item" data-view="data-feedcode">
-                        <i data-lucide="git-fork"></i>
-                        <span>Định biên đóng bao</span>
-                    </li>
-                    <li class="nav-item" data-view="data-khangsinh">
-                        <i data-lucide="shield-alert"></i>
-                        <span>Cấu hình Kháng sinh</span>
-                    </li>
-                    <li class="nav-item" data-view="data-yesterday_plan">
-                        <i data-lucide="history"></i>
-                        <span>Kế hoạch hôm qua</span>
-                    </li>
-                    <li class="nav-item border-highlight" data-view="data-adjustments">
-                        <i data-lucide="edit-3"></i>
-                        <span>Điều chỉnh nhanh</span>
-                    </li>
-                </ul>
-                
-                <!-- SECTION 2: PRODUCTION PLAN -->
-                <div class="nav-section-title">Kế hoạch sản xuất</div>
-                <ul class="nav-list">
-                    <li class="nav-item text-highlight" data-view="plan-generator">
-                        <i data-lucide="cpu"></i>
-                        <span>Lập kế hoạch KHSX</span>
-                    </li>
-                    <li class="nav-item" data-view="plan-pellet-lines">
-                        <i data-lucide="milestone"></i>
-                        <span>Kế hoạch Pellet Line</span>
-                    </li>
-                    <li class="nav-item" data-view="plan-packaging">
-                        <i data-lucide="box"></i>
-                        <span>Kế hoạch Đóng bao</span>
-                    </li>
-                    <li class="nav-item logout-nav-item" onclick="window.location.href='/logout'" style="color: #ff4d4d; border-top: 1px solid rgba(255, 255, 255, 0.05); margin-top: 1rem; padding-top: 1rem; cursor: pointer;">
+
+                    <!-- LOGOUT -->
+                    <li class="nav-item flat-nav-item logout-nav-item" onclick="window.location.href='/logout'" style="color: #ff4d4d; border-top: 1px solid rgba(255, 255, 255, 0.05); margin-top: 1.5rem; padding-top: 1rem; cursor: pointer;">
                         <i data-lucide="log-out" style="stroke: #ff4d4d;"></i>
-                        <span style="color: #ff4d4d; font-weight: 500;">Đăng xuất</span>
+                        <span style="color: #ff4d4d; font-weight: 600;">Đăng xuất</span>
                     </li>
                 </ul>
             </nav>
