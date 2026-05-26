@@ -115,9 +115,12 @@ def _find_latest_file(directory: str, pattern: str) -> Optional[str]:
     """
     Tìm file mới nhất trong thư mục theo glob pattern.
     Bỏ qua các file tạm thời bắt đầu bằng '~$'.
-    Nếu không tìm thấy ở cấp gốc, tìm đệ quy trong thư mục con.
-    Trả về đường dẫn tuyệt đối hoặc None.
+    Ưu tiên trích xuất và so sánh ngày tháng từ tên file (dạng DD-MM-YYYY).
+    Nếu không có hoặc bằng nhau, sắp xếp theo thời gian chỉnh sửa file (mtime).
     """
+    import re
+    from datetime import datetime
+
     if not os.path.isdir(directory):
         print(f"  ⚠️  Thư mục không tồn tại: {directory}")
         return None
@@ -138,9 +141,29 @@ def _find_latest_file(directory: str, pattern: str) -> Optional[str]:
         print(f"  ⚠️  Không tìm thấy file: {pattern} trong {directory}")
         return None
 
-    # Sắp xếp theo thời gian chỉnh sửa, lấy file mới nhất
-    latest = max(files, key=os.path.getmtime)
+    def _extract_date_from_filename(filepath: str) -> Optional[datetime]:
+        basename = os.path.basename(filepath)
+        # Tìm kiếm chuỗi có dạng DD-MM-YYYY (2 chữ số - 2 chữ số - 4 chữ số)
+        match = re.search(r'(\d{2})[-_\s]+(\d{2})[-_\s]+(\d{4})', basename)
+        if match:
+            day, month, year = map(int, match.groups())
+            try:
+                return datetime(year, month, day)
+            except ValueError:
+                pass
+        return None
+
+    def sort_key(filepath: str):
+        parsed_date = _extract_date_from_filename(filepath)
+        has_date = 1 if parsed_date is not None else 0
+        date_val = parsed_date if parsed_date is not None else datetime.min
+        mtime = os.path.getmtime(filepath)
+        return (has_date, date_val, mtime)
+
+    # Lấy file mới nhất dựa trên sort_key (ưu tiên ngày trong tên file, sau đó là mtime)
+    latest = max(files, key=sort_key)
     return latest
+
 
 
 def get_file_info(directory, pattern, exact_path=None):
