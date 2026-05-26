@@ -77,6 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
         detailsLastmod: document.getElementById('details-lastmod'),
         detailsFilesize: document.getElementById('details-filesize'),
         sharepointLink: document.getElementById('sharepoint-folder-link'),
+        sharepointSyncBtn: document.getElementById('sharepoint-sync-btn'),
         detailFileInput: document.getElementById('detail-file-input'),
         detailUploaderForm: document.getElementById('detail-uploader-form'),
         uploadProgressContainer: document.getElementById('upload-progress-container'),
@@ -210,6 +211,45 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    // Category SharePoint Sync button event
+    if (elements.sharepointSyncBtn) {
+        elements.sharepointSyncBtn.addEventListener('click', async () => {
+            const category = state.activeCategory;
+            if (!category) return;
+            
+            // Show spinning animation & disable button to prevent multiple clicks
+            const syncIcon = elements.sharepointSyncBtn.querySelector('.sync-icon');
+            if (syncIcon) syncIcon.classList.add('animate-spin');
+            elements.sharepointSyncBtn.disabled = true;
+            elements.sharepointSyncBtn.style.opacity = '0.6';
+            elements.sharepointSyncBtn.style.cursor = 'not-allowed';
+            
+            showToast(`Đang tải & phân tích file mới nhất từ SharePoint...`, 'warning');
+            
+            try {
+                const res = await fetch(`/api/sync-to-db/${category}`, { method: 'POST' });
+                const json = await res.json();
+                
+                if (json.success) {
+                    showToast(json.message, 'success');
+                    // Reload details to show updated data
+                    loadCategoryDetails(category);
+                } else {
+                    showToast(json.message, 'error');
+                }
+            } catch (err) {
+                console.error("DEBUG SYNC ERROR:", err);
+                showToast(`Không kết nối được server để đồng bộ ${category.toUpperCase()}!`, 'error');
+            } finally {
+                // Restore button states
+                if (syncIcon) syncIcon.classList.remove('animate-spin');
+                elements.sharepointSyncBtn.disabled = false;
+                elements.sharepointSyncBtn.style.opacity = '1';
+                elements.sharepointSyncBtn.style.cursor = 'pointer';
+            }
+        });
+    }
 
     function switchView(viewName) {
         state.currentView = viewName;
@@ -392,8 +432,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (json.sharepoint_url) {
                     elements.sharepointLink.href = json.sharepoint_url;
                     elements.sharepointLink.style.display = 'inline-flex';
+                    elements.sharepointSyncBtn.style.display = 'inline-flex';
                 } else {
                     elements.sharepointLink.style.display = 'none';
+                    elements.sharepointSyncBtn.style.display = 'none';
                 }
                 
                 state.tableData = json.data;

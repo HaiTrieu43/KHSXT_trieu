@@ -527,13 +527,15 @@ def get_detailed_data(category):
                         'cancellations': cancellations,
                         'substitutions': substitutions,
                         'bag_substitutions': bag_substitutions
-                    }
+                    },
+                    'sharepoint_url': getattr(config, 'SHAREPOINT_PLAN_URL', '')
                 })
 
             return jsonify({
                 'success': True,
                 'file_info': info,
-                'data': rows
+                'data': rows,
+                'sharepoint_url': getattr(config, f"SHAREPOINT_{category.upper()}_URL", '')
             })
 
         info = {}
@@ -810,13 +812,15 @@ def get_detailed_data(category):
                         'cancellations': cancellations,
                         'substitutions': substitutions,
                         'bag_substitutions': bag_substitutions
-                    }
+                    },
+                    'sharepoint_url': getattr(config, 'SHAREPOINT_PLAN_URL', '')
                 })
         
         return jsonify({
             'success': True,
             'file_info': info,
-            'data': rows
+            'data': rows,
+            'sharepoint_url': getattr(config, f"SHAREPOINT_{category.upper()}_URL", '')
         })
         
     except Exception as e:
@@ -1826,6 +1830,25 @@ def sync_to_db():
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'message': f'Lỗi khi đồng bộ lên Neon Tech: {str(e)}'})
+
+
+@app.route('/api/sync-to-db/<category>', methods=['POST'])
+def sync_category(category):
+    """Đồng bộ nhanh duy nhất 1 danh mục dữ liệu từ SharePoint lên Neon Tech Cloud Database"""
+    try:
+        import db_manager
+        print(f"\n☁️ Bắt đầu đồng bộ nhanh danh mục: {category.upper()} lên Neon Tech...")
+        res = db_manager.sync_category_to_db(config, category, getattr(config, 'DB_URI', db_manager.DB_URI))
+        return jsonify({
+            'success': True,
+            'message': f"Đồng bộ thành công danh mục {category.upper()} lên Cloud (File mới nhất: {res['filename']})!",
+            'filename': res['filename'],
+            'last_modified': res['last_modified']
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f"Lỗi đồng bộ danh mục {category.upper()}: {str(e)}"})
 
 
 if __name__ == '__main__':

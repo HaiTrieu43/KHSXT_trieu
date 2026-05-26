@@ -774,3 +774,184 @@ def get_plan_output_from_db(date_str, conn_str=DB_URI):
     except Exception as e:
         print(f"⚠️ Lỗi khi đọc kết quả kế hoạch từ database: {e}")
         return {'exists': False}
+
+
+def sync_category_to_db(config, category, conn_str=DB_URI) -> dict:
+    """
+    Đồng bộ và cập nhật CHỈ RIÊNG 1 danh mục dữ liệu từ SharePoint -> Excel -> PostgreSQL.
+    Tối ưu hóa tốc độ tải và xử lý, bỏ qua các danh mục khác.
+    """
+    import os
+    import datetime
+    import data_loader
+    
+    print(f"\n⚡ Bắt đầu đồng bộ danh mục: {category.upper()} từ SharePoint lên Neon Tech Cloud...")
+    
+    # 1. Xác định URL SharePoint và đường dẫn file cục bộ tương ứng
+    url = ""
+    local_path = ""
+    
+    if category == 'forecast':
+        url = getattr(config, 'SHAREPOINT_FORECAST_URL', '')
+        local_path = os.path.join(config.FORECAST_DIR, 'SharePoint_Forecast.xlsx')
+    elif category == 'silo_plan':
+        url = getattr(config, 'SHAREPOINT_SILO_URL', '')
+        local_path = os.path.join(config.SILO_DIR, 'SharePoint_Silo.xlsx')
+    elif category == 'bacang':
+        url = getattr(config, 'SHAREPOINT_BACANG_URL', '')
+        local_path = os.path.join(config.BACANG_DIR, 'SharePoint_BaCang.xlsx')
+    elif category == 'ffstock':
+        url = getattr(config, 'SHAREPOINT_FFSTOCK_URL', '')
+        local_path = os.path.join(config.FSTOCK_DIR, 'SharePoint_FFStock.xlsx')
+    elif category == 'empty_bag':
+        url = getattr(config, 'SHAREPOINT_EMPTY_BAG_URL', '')
+        local_path = os.path.join(config.FSTOCK_DIR, 'SharePoint_EmptyBag.xlsx')
+    elif category == 'tonbon':
+        url = getattr(config, 'SHAREPOINT_TONBON_URL', '')
+        local_path = os.path.join(config.TONBON_DIR, 'SharePoint_TonBon.xlsx')
+    
+    if not url:
+        # Nếu không có SharePoint URL, kiểm tra xem có file cục bộ tương ứng không để nạp trực tiếp
+        print(f"ℹ️ Không tìm thấy link SharePoint cho {category}, sử dụng file local hiện tại...")
+        # Lấy file local tương ứng
+        if category == 'forecast':
+            info = data_loader.get_file_info(config.FORECAST_DIR, '*FORECAST*.xlsx')
+        elif category == 'silo_plan':
+            info = data_loader.get_file_info(config.SILO_DIR, '*SILO*.xlsx')
+        elif category == 'bacang':
+            info = data_loader.get_file_info(config.BACANG_DIR, '*CANG*.xlsx')
+        elif category == 'ffstock':
+            info = data_loader.get_file_info(config.FSTOCK_DIR, '*FFSTOCK*.xls*')
+        elif category == 'empty_bag':
+            info = data_loader.get_file_info(config.FSTOCK_DIR, '*EMPTY BAG*.xls*')
+        elif category == 'tonbon':
+            info = data_loader.get_file_info(config.TONBON_DIR, '*ton bon*.*')
+        else:
+            info = {'exists': False}
+            
+        if not info['exists']:
+            raise Exception(f"Không tìm thấy nguồn tệp dữ liệu nào cho {category}")
+        local_path = info['path']
+    else:
+        # Tải từ SharePoint
+        success = data_loader.download_sharepoint_file(url, local_path)
+        if not success:
+            raise Exception(f"Tải tệp từ SharePoint thất bại cho {category}")
+            
+    # 2. Đọc dữ liệu từ file Excel
+    conn = get_connection(conn_str)
+    cur = conn.cursor()
+    
+    try:
+        if category == 'forecast':
+            items = data_loader.load_forecast(local_path)
+            # Clear & Insert
+            cur.execute("TRUNCATE TABLE forecast;")
+            fc_data = []
+            for it in items:
+                fc_data.append((
+                    it.product_code, it.packing_size, it.die_size,
+                    it.dealer_higro, it.dealer_cp, it.dealer_star, it.dealer_nuvo, it.dealer_nasa, it.dealer_total,
+                    it.farm_swine, it.farm_integrate, it.farm_total,
+                    it.grand_total_tons, it.silo_tons, it.total_with_silo,
+                    it.bag_higro, it.bag_cp, it.bag_star, it.bag_nuvo, it.bag_nasa, it.bag_dealer_total,
+                    it.bag_farm, it.bag_grand_total,
+                    it.feed_code_higro, it.feed_code_cp, it.feed_code_star, it.feed_code_nuvo, it.feed_code_nasa, it.feed_code_farm
+                ))
+            if fc_data:
+                execute_values(cur, """
+                INSERT INTO forecast (
+                    product_code, packing_size, die_size,
+                    dealer_higro, dealer_cp, dealer_star, dealer_nuvo, dealer_nasa, dealer_total,
+                    farm_swine, farm_integrate, farm_total,
+                    grand_total_tons, silo_tons, total_with_silo,
+                    bag_higro, bag_cp, bag_star, bag_nuvo, bag_nasa, bag_dealer_total,
+                    bag_farm, bag_grand_total,
+                    feed_code_higro, feed_code_cp, feed_code_star, feed_code_nuvo, feed_code_nasa, feed_code_farm
+                ) VALUES %s
+                """, fc_data)
+                
+        elif category == 'silo_plan':
+            silo_plan = data_loader.load_silo_plan(local_path)
+            cur.execute("TRUNCATE TABLE silo_plan;")
+            sp_data = []
+            for day, products in silo_plan.items():
+                for p, tons in products.items():
+                    sp_data.append((day, p, tons))
+            if sp_data:
+                execute_values(cur, "INSERT INTO silo_plan (day, product_code, tons) VALUES %s", sp_data)
+                
+        elif category == 'bacang':
+            bacang = data_loader.load_bacang(local_path)
+            cur.execute("TRUNCATE TABLE bacang;")
+            bc_data = []
+            for day, products in bacang.items():
+                for p, tons in products.items():
+                    bc_data.append((day, p, tons))
+            if bc_data:
+                execute_values(cur, "INSERT INTO bacang (day, product_code, tons) VALUES %s", bc_data)
+                
+        elif category == 'ffstock':
+            ffstock = data_loader.load_ffstock(local_path)
+            details = data_loader.load_ffstock_details(local_path)
+            
+            cur.execute("TRUNCATE TABLE ffstock;")
+            cur.execute("TRUNCATE TABLE ffstock_details;")
+            
+            ff_data = [(p, tons) for p, tons in ffstock.items()]
+            if ff_data:
+                execute_values(cur, "INSERT INTO ffstock (product_code, stock_tons) VALUES %s", ff_data)
+                
+            ffd_data = []
+            for p, det in details.items():
+                ffd_data.append((
+                    p, det.get('product_name', ''), det.get('stock_tons', 0.0),
+                    det.get('sales_avg_kg', 0.0), det.get('doh', None), det.get('warning', '')
+                ))
+            if ffd_data:
+                execute_values(cur, """
+                INSERT INTO ffstock_details (
+                    product_code, product_name, safety_stock_tons, daily_sales_tons, doh, warning
+                ) VALUES %s
+                """, ffd_data)
+                
+        elif category == 'empty_bag':
+            empty_bag = data_loader.load_empty_bag(local_path)
+            cur.execute("TRUNCATE TABLE empty_bag;")
+            eb_data = []
+            for p, brands in empty_bag.items():
+                for b, qty in brands.items():
+                    eb_data.append((p, b, qty))
+            if eb_data:
+                execute_values(cur, "INSERT INTO empty_bag (product_code, brand, bags) VALUES %s", eb_data)
+                
+        elif category == 'tonbon':
+            tonbon = data_loader.load_tonbon(local_path)
+            tonbon_detail = data_loader.load_tonbon_detail(local_path)
+            
+            cur.execute("TRUNCATE TABLE tonbon;")
+            cur.execute("TRUNCATE TABLE tonbon_detail;")
+            
+            tb_data = [(p, tons) for p, tons in tonbon.items()]
+            if tb_data:
+                execute_values(cur, "INSERT INTO tonbon (product_code, stock_tons) VALUES %s", tb_data)
+                
+            tbd_data = []
+            for b_id, item in tonbon_detail.items():
+                tbd_data.append((b_id, item.get('product_code', ''), item.get('tons', 0.0)))
+            if tbd_data:
+                execute_values(cur, "INSERT INTO tonbon_detail (bon_id, product_code, tons) VALUES %s", tbd_data)
+                
+        conn.commit()
+        print(f"🎉 Đồng bộ danh mục {category.upper()} thành công lên Neon Tech Cloud Database!")
+        return {
+            'success': True,
+            'filename': os.path.basename(local_path),
+            'last_modified': datetime.datetime.now().strftime('%d-%m-%Y %H:%M:%S')
+        }
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        cur.close()
+        conn.close()
