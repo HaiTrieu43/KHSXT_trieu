@@ -476,38 +476,65 @@ def get_detailed_data(category):
                     })
             elif category == 'adjustments':
                 adj = db_data['adjustments']
+                
+                # Flat additions
                 additions = []
                 for item in adj.get('additions', []):
                     additions.append({
-                        'product_code': item.get('product_code', item.get('product', '')),
+                        'product_code': item.get('product_code', ''),
                         'tons': item.get('tons', 0.0),
-                        'packing_size': item.get('packing_size', '25'),
-                        'priority': item.get('priority', 'FORECAST'),
-                        'batches': item.get('batches', ''),
-                        'tons_per_batch': item.get('tons_per_batch', ''),
+                        'packing_size': item.get('packing_size', ''),
+                        'priority': item.get('priority', ''),
+                        'force_batches': item.get('force_batches', '') or '',
+                        'force_tpb': item.get('force_tpb', '') or '',
                         'note': item.get('note', '')
                     })
+                    
+                # Flat cancellations
                 cancellations = []
-                for p, mode in adj.get('cancellations', {}).items():
-                    cancellations.append({'product_code': p, 'cancel_mode': mode})
+                for p, cancel_type in adj.get('cancellations', {}).items():
+                    cancellations.append({
+                        'product_code': p,
+                        'cancel_type': cancel_type,
+                        'note': ''
+                    })
+                    
+                # Flat substitutions
                 substitutions = []
-                for orig, repl in adj.get('substitutions', {}).items():
-                    substitutions.append({'original_code': orig, 'replacement_code': repl})
+                for old, new in adj.get('substitutions', {}).items():
+                    substitutions.append({
+                        'old_code': old,
+                        'new_code': new,
+                        'note': ''
+                    })
+                    
+                # Flat bag substitutions
                 bag_substitutions = []
-                for p, orig_repls in adj.get('bag_substitutions', {}).items():
-                    for o_brand, r_brand in orig_repls.items():
-                        bag_substitutions.append({'product_code': p, 'original_brand': o_brand, 'replacement_brand': r_brand})
-                
+                for p, mapping in adj.get('bag_substitutions', {}).items():
+                    for old_bag, new_bag in mapping.items():
+                        bag_substitutions.append({
+                            'product_code': p,
+                            'old_bag': old_bag,
+                            'new_bag': new_bag,
+                            'note': ''
+                        })
+                        
                 return jsonify({
                     'success': True,
-                    'info': info,
-                    'additions': additions,
-                    'cancellations': cancellations,
-                    'substitutions': substitutions,
-                    'bag_substitutions': bag_substitutions
+                    'file_info': info,
+                    'data': {
+                        'additions': additions,
+                        'cancellations': cancellations,
+                        'substitutions': substitutions,
+                        'bag_substitutions': bag_substitutions
+                    }
                 })
 
-            return jsonify({'success': True, 'info': info, 'rows': rows})
+            return jsonify({
+                'success': True,
+                'file_info': info,
+                'data': rows
+            })
 
         info = {}
         rows = []

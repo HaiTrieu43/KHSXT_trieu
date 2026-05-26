@@ -413,6 +413,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 elements.detailedTableTbody.innerHTML = `<tr><td style="text-align:center; color:var(--rose);">Lỗi đọc Excel: ${json.message}</td></tr>`;
             }
         } catch (err) {
+            console.error("DEBUG AJAX ERROR:", err);
             elements.detailedTableTbody.innerHTML = '<tr><td style="text-align:center; color:var(--rose);">Không kết nối được API Server.</td></tr>';
         }
     }
