@@ -60,3 +60,17 @@ DB_URI = os.environ.get('DATABASE_URL') or os.environ.get('DB_URI') or "postgres
 ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', '123456')
 
+# ============================================
+# CẤU HÌNH SHAREPOINT (TỰ ĐỘNG ĐỒNG BỘ)
+# ============================================
+# Các đường dẫn SharePoint trực tiếp cho từng loại dữ liệu đầu vào.
+# Nếu được cấu hình, hệ thống sẽ tự động tải file từ đây về trước khi đồng bộ lên database.
+SHAREPOINT_FORECAST_URL = os.environ.get('SHAREPOINT_FORECAST_URL', '')
+SHAREPOINT_SILO_URL = os.environ.get('SHAREPOINT_SILO_URL', '')
+SHAREPOINT_BACANG_URL = os.environ.get('SHAREPOINT_BACANG_URL', '')
+SHAREPOINT_FFSTOCK_URL = os.environ.get('SHAREPOINT_FFSTOCK_URL', '')
+SHAREPOINT_EMPTY_BAG_URL = os.environ.get('SHAREPOINT_EMPTY_BAG_URL', '')
+SHAREPOINT_TONBON_URL = os.environ.get('SHAREPOINT_TONBON_URL', '')
+SHAREPOINT_PLAN_URL = os.environ.get('SHAREPOINT_PLAN_URL', '')
+
+

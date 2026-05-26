@@ -1814,7 +1814,93 @@ def load_quick_adjustments(file_path: str) -> dict:
 
 
 # ============================================================
-# 11. LOAD ALL DATA
+# 11. HELPER DOWNLOAD SHAREPOINT
+# ============================================================
+
+def download_sharepoint_file(url, local_path) -> bool:
+    """Tải file từ link SharePoint/OneDrive trực tiếp với cơ chế giả lập trình duyệt"""
+    if not url:
+        return False
+    url = url.strip()
+    if not url.startswith("http"):
+        return False
+        
+    os.makedirs(os.path.dirname(local_path), exist_ok=True)
+    
+    # Thiết lập link tải trực tiếp (?download=1)
+    direct_url = url
+    if "sharepoint.com" in url and "download=1" not in url:
+        if "?" in url:
+            direct_url = url + "&download=1"
+        else:
+            direct_url = url + "?download=1"
+            
+    print(f"📥 Đang tải từ SharePoint: {url[:50]}... -> {local_path}")
+    try:
+        import urllib.request
+        # User-Agent để vượt qua các lớp chặn từ hệ thống bảo mật của SharePoint
+        req = urllib.request.Request(
+            direct_url,
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'}
+        )
+        with urllib.request.urlopen(req, timeout=45) as response:
+            with open(local_path, 'wb') as f:
+                f.write(response.read())
+        print(f"✅ Tải thành công file SharePoint: {os.path.basename(local_path)}")
+        return True
+    except Exception as e:
+        print(f"❌ Lỗi tải file SharePoint về {local_path}: {e}")
+        return False
+
+
+def download_sharepoint_files_if_configured(config):
+    """Đồng bộ tải toàn bộ file từ SharePoint về local nếu có thiết lập"""
+    print("\n🌐 BẮT ĐẦU ĐỒNG BỘ TẢI FILE TỪ CLOUD SHAREPOINT...")
+    
+    # 1. Forecast
+    forecast_url = getattr(config, 'SHAREPOINT_FORECAST_URL', '')
+    if forecast_url:
+        local_path = os.path.join(config.FORECAST_DIR, 'SharePoint_Forecast.xlsx')
+        download_sharepoint_file(forecast_url, local_path)
+        
+    # 2. Silo
+    silo_url = getattr(config, 'SHAREPOINT_SILO_URL', '')
+    if silo_url:
+        local_path = os.path.join(config.SILO_DIR, 'SharePoint_Silo.xlsx')
+        download_sharepoint_file(silo_url, local_path)
+        
+    # 3. Ba Cang
+    bacang_url = getattr(config, 'SHAREPOINT_BACANG_URL', '')
+    if bacang_url:
+        local_path = os.path.join(config.BACANG_DIR, 'SharePoint_BaCang.xlsx')
+        download_sharepoint_file(bacang_url, local_path)
+        
+    # 4. FFStock
+    ffstock_url = getattr(config, 'SHAREPOINT_FFSTOCK_URL', '')
+    if ffstock_url:
+        local_path = os.path.join(config.FSTOCK_DIR, 'SharePoint_FFStock.xlsx')
+        download_sharepoint_file(ffstock_url, local_path)
+        
+    # 5. Empty Bag
+    empty_bag_url = getattr(config, 'SHAREPOINT_EMPTY_BAG_URL', '')
+    if empty_bag_url:
+        local_path = os.path.join(config.FSTOCK_DIR, 'SharePoint_EmptyBag.xlsx')
+        download_sharepoint_file(empty_bag_url, local_path)
+        
+    # 6. Ton Bon
+    tonbon_url = getattr(config, 'SHAREPOINT_TONBON_URL', '')
+    if tonbon_url:
+        local_path = os.path.join(config.TONBON_DIR, 'SharePoint_TonBon.xlsx')
+        download_sharepoint_file(tonbon_url, local_path)
+        
+    # 7. Plan File (Plan.xlsm)
+    plan_url = getattr(config, 'SHAREPOINT_PLAN_URL', '')
+    if plan_url:
+        download_sharepoint_file(plan_url, config.PLAN_FILE)
+
+
+# ============================================================
+# 12. LOAD ALL DATA
 # ============================================================
 
 def load_all_data(config, target_date=None) -> dict:
@@ -1822,6 +1908,9 @@ def load_all_data(config, target_date=None) -> dict:
         import db_manager
         db_uri = getattr(config, 'DB_URI', db_manager.DB_URI)
         return db_manager.load_all_data_from_db(db_uri, target_date)
+
+    # Tải các tệp SharePoint về thư mục local tương ứng nếu được cấu hình
+    download_sharepoint_files_if_configured(config)
 
     print("=" * 60)
     print("🏭 BẮT ĐẦU ĐỌC DỮ LIỆU KHSX")
