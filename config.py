@@ -156,6 +156,11 @@ def _pick_dir(onedrive_dir, fallback_dir):
         return onedrive_dir
     return fallback_dir
 
+# Lưu trữ các thư mục dự phòng gốc (fallback) để dùng khi OneDrive trống hoặc không tìm thấy file
+FORECAST_DIR_FALLBACK = FORECAST_DIR
+FSTOCK_DIR_FALLBACK = FSTOCK_DIR
+TONBON_DIR_FALLBACK = TONBON_DIR
+
 # Override thư mục đầu vào: ưu tiên OneDrive, fallback về ổ D:
 FORECAST_DIR = _pick_dir(ONEDRIVE_FORECAST_DIR, FORECAST_DIR)
 FSTOCK_DIR_FFSTOCK = _pick_dir(ONEDRIVE_FFSTOCK_DIR, FSTOCK_DIR)     # Riêng FFStock

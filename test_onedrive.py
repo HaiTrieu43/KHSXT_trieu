@@ -70,5 +70,8 @@ if ff_dir:
 if bag_dir:
     f_bag = data_loader._find_latest_file(bag_dir, '*EMPTY BAG*.xls*')
     print(f"Latest Empty Bag file found: {f_bag}")
+if tb_dir:
+    f_tb = data_loader._find_latest_file(tb_dir, '*ton bon*.*')
+    print(f"Latest Ton Bon file found:  {f_tb}")
 print("=" * 60)
 

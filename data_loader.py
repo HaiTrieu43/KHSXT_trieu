@@ -858,12 +858,21 @@ def load_tonbon(file_path: str, day: int = None) -> dict:
         sheet_name = None
         for num in sorted(numeric_sheets, reverse=True):
             ws_test = wb[str(num)]
-            # Kiểm tra có dữ liệu không (check dòng 9-10)
+            # Kiểm tra có dữ liệu thực tế không (check các dòng 10-45 có chứa mã cám và kg > 0)
             has_data = False
-            for row in ws_test.iter_rows(min_row=9, max_row=12, max_col=3):
-                if row[1].value is not None:
-                    has_data = True
-                    break
+            for row in ws_test.iter_rows(min_row=10, max_row=45, max_col=8):
+                if len(row) > 2:
+                    p_left = _normalize_product_code(row[1].value)
+                    kg_left = _safe_float(row[2].value)
+                    if p_left and kg_left > 0:
+                        has_data = True
+                        break
+                if len(row) > 6:
+                    p_right = _normalize_product_code(row[5].value)
+                    kg_right = _safe_float(row[6].value)
+                    if p_right and kg_right > 0:
+                        has_data = True
+                        break
             if has_data:
                 sheet_name = str(num)
                 break
@@ -938,12 +947,21 @@ def load_tonbon_detail(file_path: str, day: int = None) -> dict:
         sheet_name = None
         for num in sorted(numeric_sheets, reverse=True):
             ws_test = wb[str(num)]
-            # Kiểm tra có dữ liệu không (check dòng 9-10)
+            # Kiểm tra có dữ liệu thực tế không (check các dòng 10-45 có chứa mã cám và kg > 0)
             has_data = False
-            for row in ws_test.iter_rows(min_row=9, max_row=12, max_col=3):
-                if row[1].value is not None:
-                    has_data = True
-                    break
+            for row in ws_test.iter_rows(min_row=10, max_row=45, max_col=8):
+                if len(row) > 2:
+                    p_left = _normalize_product_code(row[1].value)
+                    kg_left = _safe_float(row[2].value)
+                    if p_left and kg_left > 0:
+                        has_data = True
+                        break
+                if len(row) > 6:
+                    p_right = _normalize_product_code(row[5].value)
+                    kg_right = _safe_float(row[6].value)
+                    if p_right and kg_right > 0:
+                        has_data = True
+                        break
             if has_data:
                 sheet_name = str(num)
                 break
@@ -2078,11 +2096,16 @@ def load_all_data(config, target_date=None) -> dict:
         print("  ⚠️  Bỏ qua ĐIỀU CHỈNH NHANH")
 
     # ─── 1. FORECAST ─────────────────────────────────────────
-
     print("\n" + "─" * 40)
     forecast_file = _find_latest_file(
         config.FORECAST_DIR, '*FORECAST*.xlsx'
     )
+    if not forecast_file:
+        fallback_dir = getattr(config, 'FORECAST_DIR_FALLBACK', None)
+        if fallback_dir and fallback_dir != config.FORECAST_DIR:
+            print(f"  ℹ️  Không tìm thấy file Forecast trong OneDrive, thử tìm ở thư mục dự phòng: {fallback_dir}")
+            forecast_file = _find_latest_file(fallback_dir, '*FORECAST*.xlsx')
+
     if forecast_file:
         data['forecast'] = load_forecast(forecast_file)
     else:
@@ -2130,6 +2153,12 @@ def load_all_data(config, target_date=None) -> dict:
     tonbon_file = _find_latest_file(
         config.TONBON_DIR, '*ton bon*.*'
     )
+    if not tonbon_file:
+        fallback_dir = getattr(config, 'TONBON_DIR_FALLBACK', None)
+        if fallback_dir and fallback_dir != config.TONBON_DIR:
+            print(f"  ℹ️  Không tìm thấy file Tồn Bồn trong OneDrive, thử tìm ở thư mục dự phòng: {fallback_dir}")
+            tonbon_file = _find_latest_file(fallback_dir, '*ton bon*.*')
+
     if tonbon_file:
         data['tonbon'] = load_tonbon(tonbon_file)
         data['tonbon_detail'] = load_tonbon_detail(tonbon_file)
@@ -2144,6 +2173,12 @@ def load_all_data(config, target_date=None) -> dict:
     bag_file = _find_latest_file(
         bag_dir, '*EMPTY BAG*.xls*'
     )
+    if not bag_file:
+        fallback_dir = getattr(config, 'FSTOCK_DIR_FALLBACK', None)
+        if fallback_dir and fallback_dir != bag_dir:
+            print(f"  ℹ️  Không tìm thấy file Bao Bì trong OneDrive, thử tìm ở thư mục dự phòng: {fallback_dir}")
+            bag_file = _find_latest_file(fallback_dir, '*EMPTY BAG*.xls*')
+
     if bag_file:
         data['empty_bag'] = load_empty_bag(bag_file)
     else:
