@@ -65,12 +65,12 @@ ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', '123456')
 # ============================================
 # Các đường dẫn SharePoint trực tiếp cho từng loại dữ liệu đầu vào.
 # Nếu được cấu hình, hệ thống sẽ tự động tải file từ đây về trước khi đồng bộ lên database.
-SHAREPOINT_FORECAST_URL = os.environ.get('SHAREPOINT_FORECAST_URL', '')
+SHAREPOINT_FORECAST_URL = os.environ.get('SHAREPOINT_FORECAST_URL', 'https://cpvn.sharepoint.com/:f:/r/sites/CPVDocument/BDG%20AgroFeed%20Production/File%20d%C3%B9ng%20chung/B%E1%BB%98%20PH%E1%BA%ACN%20H%C3%80NH%20CH%C3%81NH/MR%20NHO/sale%20packing%20daily?csf=1&web=1&e=2upepi')
 SHAREPOINT_SILO_URL = os.environ.get('SHAREPOINT_SILO_URL', '')
 SHAREPOINT_BACANG_URL = os.environ.get('SHAREPOINT_BACANG_URL', '')
-SHAREPOINT_FFSTOCK_URL = os.environ.get('SHAREPOINT_FFSTOCK_URL', '')
-SHAREPOINT_EMPTY_BAG_URL = os.environ.get('SHAREPOINT_EMPTY_BAG_URL', '')
-SHAREPOINT_TONBON_URL = os.environ.get('SHAREPOINT_TONBON_URL', '')
+SHAREPOINT_FFSTOCK_URL = os.environ.get('SHAREPOINT_FFSTOCK_URL', 'https://cpvn.sharepoint.com/:f:/r/sites/CPVDocument/BDG%20AgroFeed%20Public/04.%20Ph%C3%B2ng%20Kho%20Th%C3%A0nh%20Ph%E1%BA%A9m/H%E1%BB%92%20S%C6%A0%20ONLINE/11.%20B%C3%81O%20C%C3%81O%20T%E1%BB%92N%20KHO%20C%C3%81M%20H%C3%80NG%20NG%C3%80Y%20(QT-TP-02.BM08)/N%C4%82M%202026?csf=1&web=1&e=68Ja6Y')
+SHAREPOINT_EMPTY_BAG_URL = os.environ.get('SHAREPOINT_EMPTY_BAG_URL', 'https://cpvn.sharepoint.com/:f:/r/sites/CPVDocument/BDG%20AgroFeed%20Public/04.%20Ph%C3%B2ng%20Kho%20Th%C3%A0nh%20Ph%E1%BA%A9m/H%E1%BB%92%20S%C6%A0%20ONLINE/15.%20B%C3%81O%20C%C3%81O%20T%E1%BB%92N%20KHO%20BAO%20B%C3%8C%20H%C3%80NG%20NG%C3%80Y%20(QT-TP-02.BM12)/N%C4%82M%202026?csf=1&web=1&e=jCyljk')
+SHAREPOINT_TONBON_URL = os.environ.get('SHAREPOINT_TONBON_URL', 'https://cpvn.sharepoint.com/:f:/r/sites/CPVDocument/BDG%20AgroFeed%20Production/File%20d%C3%B9ng%20chung/B%C3%81O%20C%C3%81O%20V%E1%BA%ACN%20H%C3%80NH%20S%E1%BA%A2N%20XU%E1%BA%A4T/B%C3%81O%20C%C3%81O%20BIN-QC/B%C3%81O%20C%C3%81O%20T%E1%BB%92N%20BIN/2026?csf=1&web=1&e=QeWRtb')
 SHAREPOINT_PLAN_URL = os.environ.get('SHAREPOINT_PLAN_URL', '')
 
 

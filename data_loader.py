@@ -1818,7 +1818,7 @@ def load_quick_adjustments(file_path: str) -> dict:
 # ============================================================
 
 def download_sharepoint_file(url, local_path) -> bool:
-    """Tải file từ link SharePoint/OneDrive trực tiếp với cơ chế giả lập trình duyệt"""
+    """Tải file từ link SharePoint/OneDrive trực tiếp với cơ chế giả lập trình duyệt và giải nén thư mục tự động nếu là ZIP"""
     if not url:
         return False
     url = url.strip()
@@ -1835,19 +1835,78 @@ def download_sharepoint_file(url, local_path) -> bool:
         else:
             direct_url = url + "?download=1"
             
-    print(f"📥 Đang tải từ SharePoint: {url[:50]}... -> {local_path}")
+    print(f"📥 Đang tải từ SharePoint: {url[:60]}... -> {local_path}")
     try:
         import urllib.request
+        import zipfile
+        import io
+        import re
+        import datetime
+        
         # User-Agent để vượt qua các lớp chặn từ hệ thống bảo mật của SharePoint
         req = urllib.request.Request(
             direct_url,
             headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'}
         )
-        with urllib.request.urlopen(req, timeout=45) as response:
+        with urllib.request.urlopen(req, timeout=60) as response:
+            response_data = response.read()
+            
+        # Kiểm tra xem file tải về có phải là file ZIP hay không (thường xảy ra khi tải thư mục sharepoint)
+        if response_data.startswith(b'PK\x03\x04'):
+            print("📦 Nhận diện dữ liệu tải về là dạng nén ZIP (SharePoint Shared Folder).")
+            with zipfile.ZipFile(io.BytesIO(response_data)) as z:
+                # Lọc danh sách các file excel hợp lệ bên trong
+                excel_files = []
+                for name in z.namelist():
+                    # Bỏ qua file tạm thời của excel (~$) và thư mục con
+                    if name.endswith('/') or os.path.basename(name).startswith('~$'):
+                        continue
+                    ext = os.path.splitext(name)[1].lower()
+                    if ext in ['.xlsx', '.xls', '.xlsm']:
+                        excel_files.append(name)
+                
+                if excel_files:
+                    # Sắp xếp tìm file mới nhất. Đầu tiên là parse ngày trong tên file
+                    # VD: FFSTOCK 25-05-2026.xlsx -> 2026, 05, 25
+                    date_pattern = re.compile(r'(\d{1,2})[-_/\s](\d{1,2})[-_/\s](\d{4})')
+                    
+                    def get_file_sort_key(filename):
+                        # 1. Thử parse date trong tên file
+                        match = date_pattern.search(os.path.basename(filename))
+                        if match:
+                            try:
+                                d, m, y = int(match.group(1)), int(match.group(2)), int(match.group(3))
+                                return (2, datetime.date(y, m, d), filename)
+                            except Exception:
+                                pass
+                        # 2. Dùng modification date từ zipinfo làm phương án dự phòng
+                        try:
+                            zinfo = z.getinfo(filename)
+                            dt = datetime.datetime(*zinfo.date_time)
+                            return (1, dt, filename)
+                        except Exception:
+                            pass
+                        # 3. Mặc định dùng tên file sắp xếp bảng chữ cái
+                        return (0, filename, filename)
+                    
+                    excel_files.sort(key=get_file_sort_key, reverse=True)
+                    target_zip_file = excel_files[0]
+                    print(f"📂 Đã tìm thấy {len(excel_files)} file Excel trong thư mục. File mới nhất: {target_zip_file}")
+                    
+                    # Extract file này ra local_path
+                    with open(local_path, 'wb') as f:
+                        f.write(z.read(target_zip_file))
+                    print(f"✅ Tải và giải nén thành công file SharePoint: {os.path.basename(local_path)}")
+                    return True
+                else:
+                    print("❌ Lỗi: Không tìm thấy file Excel hợp lệ nào bên trong tệp ZIP tải về.")
+                    return False
+        else:
             with open(local_path, 'wb') as f:
-                f.write(response.read())
-        print(f"✅ Tải thành công file SharePoint: {os.path.basename(local_path)}")
-        return True
+                f.write(response_data)
+            print(f"✅ Tải thành công file SharePoint trực tiếp: {os.path.basename(local_path)}")
+            return True
+            
     except Exception as e:
         print(f"❌ Lỗi tải file SharePoint về {local_path}: {e}")
         return False

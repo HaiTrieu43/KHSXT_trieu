@@ -76,6 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
         detailsFilename: document.getElementById('details-filename'),
         detailsLastmod: document.getElementById('details-lastmod'),
         detailsFilesize: document.getElementById('details-filesize'),
+        sharepointLink: document.getElementById('sharepoint-folder-link'),
         detailFileInput: document.getElementById('detail-file-input'),
         detailUploaderForm: document.getElementById('detail-uploader-form'),
         uploadProgressContainer: document.getElementById('upload-progress-container'),
@@ -386,6 +387,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 elements.detailsFilename.textContent = `Tên file: ${info.filename || 'Không có'}`;
                 elements.detailsLastmod.textContent = `Cập nhật: ${info.last_modified || '-'}`;
                 elements.detailsFilesize.textContent = `Dung lượng: ${info.size || '-'}`;
+                
+                // Hiển thị nút liên kết SharePoint nếu có cấu hình
+                if (json.sharepoint_url) {
+                    elements.sharepointLink.href = json.sharepoint_url;
+                    elements.sharepointLink.style.display = 'inline-flex';
+                } else {
+                    elements.sharepointLink.style.display = 'none';
+                }
                 
                 state.tableData = json.data;
                 state.filteredData = [...json.data];
