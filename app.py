@@ -190,9 +190,9 @@ def get_data_status():
             'forecast': get_file_info(config.FORECAST_DIR, '*FORECAST*.xlsx'),
             'silo_plan': get_file_info(config.SILO_DIR, '*SILO*.xlsx'),
             'bacang': get_file_info(config.BACANG_DIR, '*CANG*.xlsx'),
-            'ffstock': get_file_info(config.FSTOCK_DIR, '*FFSTOCK*.xls*'),
+            'ffstock': get_file_info(getattr(config, 'FSTOCK_DIR_FFSTOCK', config.FSTOCK_DIR), '*FFSTOCK*.xls*'),
             'tonbon': get_file_info(config.TONBON_DIR, '*ton bon*.*'),
-            'empty_bag': get_file_info(config.FSTOCK_DIR, '*EMPTY BAG*.xls*'),
+            'empty_bag': get_file_info(getattr(config, 'FSTOCK_DIR_EMPTYBAG', config.FSTOCK_DIR), '*EMPTY BAG*.xls*'),
             'congsuat': get_file_info(None, None, exact_path=config.PLAN_FILE),
             'feedcode': get_file_info(None, None, exact_path=config.KHSX_FILE),
             'khangsinh': get_file_info(None, None, exact_path=config.KHSX_FILE),
@@ -239,7 +239,8 @@ def get_latest_target_date():
         import re
         
         # 1. Tìm tất cả các file FFSTOCK trong thư mục FSTOCK_DIR
-        pattern = os.path.join(config.FSTOCK_DIR, "*FFSTOCK*.xls*")
+        ffstock_dir = getattr(config, 'FSTOCK_DIR_FFSTOCK', config.FSTOCK_DIR)
+        pattern = os.path.join(ffstock_dir, "*FFSTOCK*.xls*")
         files = glob.glob(pattern)
         
         # Lọc bỏ file tạm thời
@@ -592,7 +593,7 @@ def get_detailed_data(category):
                     rows.append(row)
                     
         elif category == 'ffstock':
-            info = get_file_info(config.FSTOCK_DIR, '*FFSTOCK*.xls*')
+            info = get_file_info(getattr(config, 'FSTOCK_DIR_FFSTOCK', config.FSTOCK_DIR), '*FFSTOCK*.xls*')
             if info['exists']:
                 ffstock = data_loader.load_ffstock(info['path'])
                 details = data_loader.load_ffstock_details(info['path'])
@@ -682,7 +683,7 @@ def get_detailed_data(category):
                     })
                     
         elif category == 'empty_bag':
-            info = get_file_info(config.FSTOCK_DIR, '*EMPTY BAG*.xls*')
+            info = get_file_info(getattr(config, 'FSTOCK_DIR_EMPTYBAG', config.FSTOCK_DIR), '*EMPTY BAG*.xls*')
             if info['exists']:
                 empty_bag = data_loader.load_empty_bag(info['path'])
                 # empty_bag: dict {product → {brand → bags}}
@@ -859,11 +860,11 @@ def upload_file(category):
         elif category == 'bacang':
             target_dir = config.BACANG_DIR
         elif category == 'ffstock':
-            target_dir = config.FSTOCK_DIR
+            target_dir = getattr(config, 'FSTOCK_DIR_FFSTOCK', config.FSTOCK_DIR)
         elif category == 'tonbon':
             target_dir = config.TONBON_DIR
         elif category == 'empty_bag':
-            target_dir = config.FSTOCK_DIR
+            target_dir = getattr(config, 'FSTOCK_DIR_EMPTYBAG', config.FSTOCK_DIR)
         elif category == 'congsuat':
             # file cố định Plan.xlsm
             target_dir = config.PLAN_DIR
@@ -1197,7 +1198,7 @@ def load_doh_data_for_sequence(sequence_items):
     
     try:
         # Nguồn 1: Đọc DOH từ FFSTOCK 
-        ffstock_info = get_file_info(config.FSTOCK_DIR, '*FFSTOCK*.xls*')
+        ffstock_info = get_file_info(getattr(config, 'FSTOCK_DIR_FFSTOCK', config.FSTOCK_DIR), '*FFSTOCK*.xls*')
         if ffstock_info['exists']:
             ffstock = data_loader.load_ffstock(ffstock_info['path'])
             details = data_loader.load_ffstock_details(ffstock_info['path'])

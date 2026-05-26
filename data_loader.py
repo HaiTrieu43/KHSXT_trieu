@@ -136,6 +136,40 @@ def _find_latest_file(directory: str, pattern: str) -> Optional[str]:
     return latest
 
 
+def get_file_info(directory, pattern, exact_path=None):
+    """Lấy thông tin của file mới nhất theo pattern hoặc đường dẫn chính xác.
+    
+    Trả về dict với keys: exists, filename, last_modified, size, path
+    """
+    import datetime
+    
+    if exact_path:
+        path = exact_path
+    else:
+        path = _find_latest_file(directory, pattern)
+        
+    if not path or not os.path.isfile(path):
+        return {
+            'exists': False,
+            'filename': 'Không tìm thấy',
+            'last_modified': '-',
+            'size': '-',
+            'path': ''
+        }
+        
+    stat = os.stat(path)
+    mtime = datetime.datetime.fromtimestamp(stat.st_mtime)
+    size_kb = round(stat.st_size / 1024, 1)
+    
+    return {
+        'exists': True,
+        'filename': os.path.basename(path),
+        'last_modified': mtime.strftime('%d-%m-%Y %H:%M:%S'),
+        'size': f"{size_kb} KB",
+        'path': path
+    }
+
+
 def _open_workbook(file_path: str, data_only=True, read_only=True):
     """
     Mở workbook Excel an toàn với xử lý encoding.
@@ -2042,8 +2076,9 @@ def load_all_data(config, target_date=None) -> dict:
 
     # ─── 4. FFSTOCK ──────────────────────────────────────────
     print("\n" + "─" * 40)
+    ffstock_dir = getattr(config, 'FSTOCK_DIR_FFSTOCK', config.FSTOCK_DIR)
     ffstock_file = _find_latest_file(
-        config.FSTOCK_DIR, '*FFSTOCK*.xls*'
+        ffstock_dir, '*FFSTOCK*.xls*'
     )
     if ffstock_file:
         data['ffstock'] = load_ffstock(ffstock_file)
@@ -2068,8 +2103,9 @@ def load_all_data(config, target_date=None) -> dict:
 
     # ─── 6. EMPTY BAG ────────────────────────────────────────
     print("\n" + "─" * 40)
+    bag_dir = getattr(config, 'FSTOCK_DIR_EMPTYBAG', config.FSTOCK_DIR)
     bag_file = _find_latest_file(
-        config.FSTOCK_DIR, '*EMPTY BAG*.xls*'
+        bag_dir, '*EMPTY BAG*.xls*'
     )
     if bag_file:
         data['empty_bag'] = load_empty_bag(bag_file)

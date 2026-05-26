@@ -61,16 +61,98 @@ ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', '123456')
 
 # ============================================
-# CẤU HÌNH SHAREPOINT (TỰ ĐỘNG ĐỒNG BỘ)
+# CẤU HÌNH ONEDRIVE ĐỒNG BỘ CỤC BỘ
 # ============================================
-# Các đường dẫn SharePoint trực tiếp cho từng loại dữ liệu đầu vào.
-# Nếu được cấu hình, hệ thống sẽ tự động tải file từ đây về trước khi đồng bộ lên database.
-SHAREPOINT_FORECAST_URL = os.environ.get('SHAREPOINT_FORECAST_URL', 'https://cpvn.sharepoint.com/:f:/r/sites/CPVDocument/BDG%20AgroFeed%20Production/File%20d%C3%B9ng%20chung/B%E1%BB%98%20PH%E1%BA%ACN%20H%C3%80NH%20CH%C3%81NH/MR%20NHO/sale%20packing%20daily?csf=1&web=1&e=2upepi')
+# OneDrive doanh nghiệp tự động tải file SharePoint về thư mục này.
+# Hệ thống sẽ ưu tiên đọc từ thư mục OneDrive, nếu không có sẽ fallback về ổ D:.
+
+ONEDRIVE_BASE_DIR = r'C:\Users\haitr\OneDrive - Cong Ty Co Phan Chan Nuoi C.P. Viet Nam'
+
+# Đường dẫn các thư mục OneDrive đã đồng bộ từ SharePoint (sẽ tự phát hiện sau khi sync)
+# Khi bạn nhấn "Sync" trên SharePoint, OneDrive sẽ tạo thư mục tương ứng.
+# Cấu hình bên dưới sẽ được cập nhật sau khi bạn sync xong.
+
+# --- FFStock (Tồn kho thành phẩm hàng ngày) ---
+ONEDRIVE_FFSTOCK_DIR = os.path.join(
+    ONEDRIVE_BASE_DIR,
+    r'BDG AgroFeed Public\04. Phòng Kho Thành Phẩm\HỒ SƠ ONLINE\11. BÁO CÁO TỒN KHO CÁM HÀNG NGÀY (QT-TP-02.BM08)\NĂM 2026'
+)
+
+# --- Empty Bag (Bao bì hàng ngày) ---
+ONEDRIVE_EMPTY_BAG_DIR = os.path.join(
+    ONEDRIVE_BASE_DIR,
+    r'BDG AgroFeed Public\04. Phòng Kho Thành Phẩm\HỒ SƠ ONLINE\15. BÁO CÁO TỒN KHO BAO BÌ HÀNG NGÀY (QT-TP-02.BM12)\NĂM 2026'
+)
+
+# --- Sale Packing Daily (Forecast) ---
+ONEDRIVE_FORECAST_DIR = os.path.join(
+    ONEDRIVE_BASE_DIR,
+    r'BDG AgroFeed Production\File dùng chung\BỘ PHẬN HÀNH CHÁNH\MR NHO\sale packing daily'
+)
+
+# --- Tồn Bồn (Bin Report) ---
+ONEDRIVE_TONBON_DIR = os.path.join(
+    ONEDRIVE_BASE_DIR,
+    r'BDG AgroFeed Production\File dùng chung\BÁO CÁO VẬN HÀNH SẢN XUẤT\BÁO CÁO BIN-QC\BÁO CÁO TỒN BIN\2026'
+)
+
+def _pick_dir(onedrive_dir, fallback_dir):
+    """Ưu tiên thư mục OneDrive nếu tồn tại, nếu không dùng fallback."""
+    if os.path.isdir(onedrive_dir):
+        return onedrive_dir
+    return fallback_dir
+
+# Override thư mục đầu vào: ưu tiên OneDrive, fallback về ổ D:
+FORECAST_DIR = _pick_dir(ONEDRIVE_FORECAST_DIR, FORECAST_DIR)
+FSTOCK_DIR_FFSTOCK = _pick_dir(ONEDRIVE_FFSTOCK_DIR, FSTOCK_DIR)     # Riêng FFStock
+FSTOCK_DIR_EMPTYBAG = _pick_dir(ONEDRIVE_EMPTY_BAG_DIR, FSTOCK_DIR)  # Riêng Empty Bag
+TONBON_DIR = _pick_dir(ONEDRIVE_TONBON_DIR, TONBON_DIR)
+
+# Ghi log thư mục đang sử dụng khi khởi chạy
+def _log_active_dirs():
+    """In ra console thư mục dữ liệu đang dùng (OneDrive hay fallback)"""
+    import sys
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+    
+    try:
+        print("=" * 60)
+        print("[DIRS] CAU HINH THU MUC DU LIEU DANG SU DUNG:")
+        print(f"   Forecast:  {FORECAST_DIR}")
+        print(f"   FFStock:   {FSTOCK_DIR_FFSTOCK}")
+        print(f"   Empty Bag: {FSTOCK_DIR_EMPTYBAG}")
+        print(f"   Ton Bon:   {TONBON_DIR}")
+        print(f"   Silo:      {SILO_DIR}")
+        print(f"   Ba Cang:   {BACANG_DIR}")
+        
+        onedrive_active = any([
+            os.path.isdir(ONEDRIVE_FFSTOCK_DIR),
+            os.path.isdir(ONEDRIVE_EMPTY_BAG_DIR),
+            os.path.isdir(ONEDRIVE_FORECAST_DIR),
+            os.path.isdir(ONEDRIVE_TONBON_DIR),
+        ])
+        if onedrive_active:
+            print("   [OK] OneDrive dang hoat dong - doc du lieu tu SharePoint tu dong!")
+        else:
+            print("   [!] OneDrive chua duoc dong bo - dang dung thu muc cuc bo o D:")
+        print("=" * 60)
+    except Exception:
+        pass
+
+_log_active_dirs()
+
+
+# ============================================
+# CẤU HÌNH SHAREPOINT URL (Dự phòng - chỉ dùng khi không có OneDrive)
+# ============================================
+SHAREPOINT_FORECAST_URL = os.environ.get('SHAREPOINT_FORECAST_URL', '')
 SHAREPOINT_SILO_URL = os.environ.get('SHAREPOINT_SILO_URL', '')
 SHAREPOINT_BACANG_URL = os.environ.get('SHAREPOINT_BACANG_URL', '')
-SHAREPOINT_FFSTOCK_URL = os.environ.get('SHAREPOINT_FFSTOCK_URL', 'https://cpvn.sharepoint.com/:f:/r/sites/CPVDocument/BDG%20AgroFeed%20Public/04.%20Ph%C3%B2ng%20Kho%20Th%C3%A0nh%20Ph%E1%BA%A9m/H%E1%BB%92%20S%C6%A0%20ONLINE/11.%20B%C3%81O%20C%C3%81O%20T%E1%BB%92N%20KHO%20C%C3%81M%20H%C3%80NG%20NG%C3%80Y%20(QT-TP-02.BM08)/N%C4%82M%202026?csf=1&web=1&e=68Ja6Y')
-SHAREPOINT_EMPTY_BAG_URL = os.environ.get('SHAREPOINT_EMPTY_BAG_URL', 'https://cpvn.sharepoint.com/:f:/r/sites/CPVDocument/BDG%20AgroFeed%20Public/04.%20Ph%C3%B2ng%20Kho%20Th%C3%A0nh%20Ph%E1%BA%A9m/H%E1%BB%92%20S%C6%A0%20ONLINE/15.%20B%C3%81O%20C%C3%81O%20T%E1%BB%92N%20KHO%20BAO%20B%C3%8C%20H%C3%80NG%20NG%C3%80Y%20(QT-TP-02.BM12)/N%C4%82M%202026?csf=1&web=1&e=jCyljk')
-SHAREPOINT_TONBON_URL = os.environ.get('SHAREPOINT_TONBON_URL', 'https://cpvn.sharepoint.com/:f:/r/sites/CPVDocument/BDG%20AgroFeed%20Production/File%20d%C3%B9ng%20chung/B%C3%81O%20C%C3%81O%20V%E1%BA%ACN%20H%C3%80NH%20S%E1%BA%A2N%20XU%E1%BA%A4T/B%C3%81O%20C%C3%81O%20BIN-QC/B%C3%81O%20C%C3%81O%20T%E1%BB%92N%20BIN/2026?csf=1&web=1&e=QeWRtb')
+SHAREPOINT_FFSTOCK_URL = os.environ.get('SHAREPOINT_FFSTOCK_URL', '')
+SHAREPOINT_EMPTY_BAG_URL = os.environ.get('SHAREPOINT_EMPTY_BAG_URL', '')
+SHAREPOINT_TONBON_URL = os.environ.get('SHAREPOINT_TONBON_URL', '')
 SHAREPOINT_PLAN_URL = os.environ.get('SHAREPOINT_PLAN_URL', '')
 
 

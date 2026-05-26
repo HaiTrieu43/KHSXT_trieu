@@ -802,10 +802,12 @@ def sync_category_to_db(config, category, conn_str=DB_URI) -> dict:
         local_path = os.path.join(config.BACANG_DIR, 'SharePoint_BaCang.xlsx')
     elif category == 'ffstock':
         url = getattr(config, 'SHAREPOINT_FFSTOCK_URL', '')
-        local_path = os.path.join(config.FSTOCK_DIR, 'SharePoint_FFStock.xlsx')
+        ffstock_dir = getattr(config, 'FSTOCK_DIR_FFSTOCK', config.FSTOCK_DIR)
+        local_path = os.path.join(ffstock_dir, 'SharePoint_FFStock.xlsx')
     elif category == 'empty_bag':
         url = getattr(config, 'SHAREPOINT_EMPTY_BAG_URL', '')
-        local_path = os.path.join(config.FSTOCK_DIR, 'SharePoint_EmptyBag.xlsx')
+        bag_dir = getattr(config, 'FSTOCK_DIR_EMPTYBAG', config.FSTOCK_DIR)
+        local_path = os.path.join(bag_dir, 'SharePoint_EmptyBag.xlsx')
     elif category == 'tonbon':
         url = getattr(config, 'SHAREPOINT_TONBON_URL', '')
         local_path = os.path.join(config.TONBON_DIR, 'SharePoint_TonBon.xlsx')
@@ -821,9 +823,11 @@ def sync_category_to_db(config, category, conn_str=DB_URI) -> dict:
         elif category == 'bacang':
             info = data_loader.get_file_info(config.BACANG_DIR, '*CANG*.xlsx')
         elif category == 'ffstock':
-            info = data_loader.get_file_info(config.FSTOCK_DIR, '*FFSTOCK*.xls*')
+            ffstock_dir = getattr(config, 'FSTOCK_DIR_FFSTOCK', config.FSTOCK_DIR)
+            info = data_loader.get_file_info(ffstock_dir, '*FFSTOCK*.xls*')
         elif category == 'empty_bag':
-            info = data_loader.get_file_info(config.FSTOCK_DIR, '*EMPTY BAG*.xls*')
+            bag_dir = getattr(config, 'FSTOCK_DIR_EMPTYBAG', config.FSTOCK_DIR)
+            info = data_loader.get_file_info(bag_dir, '*EMPTY BAG*.xls*')
         elif category == 'tonbon':
             info = data_loader.get_file_info(config.TONBON_DIR, '*ton bon*.*')
         else:
