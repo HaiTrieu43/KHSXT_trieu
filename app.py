@@ -101,13 +101,43 @@ def _safe_int_val(v):
 def require_login():
     """Tự động bảo vệ tất cả các endpoints, yêu cầu đăng nhập"""
     # Các endpoint được truy cập tự do không cần đăng nhập
-    allowed_endpoints = ['login', 'static']
+    allowed_endpoints = ['login', 'static', 'healthz', 'health']
     if request.endpoint and request.endpoint not in allowed_endpoints:
         # Bỏ qua kiểm tra favicon
         if request.path == '/favicon.ico':
             return
         if not session.get('logged_in'):
             return redirect(url_for('login'))
+
+
+@app.route('/healthz', methods=['GET'])
+@app.route('/health', methods=['GET'])
+def healthz():
+    """Endpoint Health Check phục vụ Uptime Robot / Render Keep-Alive"""
+    status = {
+        "status": "healthy",
+        "timestamp": datetime.datetime.now().isoformat(),
+        "database": "not_used"
+    }
+    
+    if getattr(config, 'USE_POSTGRESQL', False):
+        try:
+            import db_manager
+            # Thử tạo kết nối nhanh và chạy truy vấn SELECT 1
+            conn = db_manager.get_connection(getattr(config, 'DB_URI', db_manager.DB_URI))
+            cur = conn.cursor()
+            cur.execute("SELECT 1;")
+            cur.fetchone()
+            cur.close()
+            conn.close()
+            status["database"] = "connected"
+        except Exception as e:
+            status["status"] = "degraded"
+            status["database"] = "error"
+            status["error"] = str(e)
+            return jsonify(status), 500
+            
+    return jsonify(status), 200
 
 
 @app.route('/login', methods=['GET', 'POST'])

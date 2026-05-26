@@ -58,5 +58,5 @@ DB_URI = os.environ.get('DATABASE_URL') or os.environ.get('DB_URI') or "postgres
 # CẤU HÌNH TÀI KHOẢN ADMIN ĐĂNG NHẬP APP
 # ============================================
 ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')
-ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'cp@123456')
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', '123456')
 
