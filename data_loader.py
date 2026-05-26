@@ -1851,60 +1851,74 @@ def download_sharepoint_file(url, local_path) -> bool:
         with urllib.request.urlopen(req, timeout=60) as response:
             response_data = response.read()
             
-        # Kiểm tra xem file tải về có phải là file ZIP hay không (thường xảy ra khi tải thư mục sharepoint)
-        if response_data.startswith(b'PK\x03\x04'):
-            print("📦 Nhận diện dữ liệu tải về là dạng nén ZIP (SharePoint Shared Folder).")
+        # Kiểm tra tính hợp lệ của file Excel/ZIP (nếu là HTML redirect thì bỏ qua và báo lỗi)
+        is_zip = response_data.startswith(b'PK\x03\x04')
+        is_xls = response_data.startswith(b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1')
+        
+        if not (is_zip or is_xls):
+            # Nếu chứa HTML (ví dụ trang đăng nhập Microsoft)
+            sample = response_data[:1000].decode('utf-8', errors='ignore')
+            if '<html' in sample.lower() or '<!doctype' in sample.lower() or 'microsoft' in sample.lower() or 'redirect' in sample.lower():
+                raise Exception("SharePoint yêu cầu xác thực đăng nhập doanh nghiệp (MFA/ADFS). Vui lòng sử dụng nút 'Mở thư mục SharePoint' tải về máy rồi Kéo thả để cập nhật nhanh.")
+            raise Exception("Dữ liệu nhận về không phải định dạng Excel (.xlsx/.xlsm) hoặc ZIP hợp lệ.")
+            
+        if is_zip:
+            # Có thể là file Excel (.xlsx) trực tiếp hoặc file ZIP của cả thư mục
             with zipfile.ZipFile(io.BytesIO(response_data)) as z:
-                # Lọc danh sách các file excel hợp lệ bên trong
-                excel_files = []
-                for name in z.namelist():
-                    # Bỏ qua file tạm thời của excel (~$) và thư mục con
-                    if name.endswith('/') or os.path.basename(name).startswith('~$'):
-                        continue
-                    ext = os.path.splitext(name)[1].lower()
-                    if ext in ['.xlsx', '.xls', '.xlsm']:
-                        excel_files.append(name)
+                names = z.namelist()
+                # Nếu là file Excel trực tiếp, nó sẽ chứa thư mục xl/
+                is_direct_excel = 'xl/workbook.xml' in names or '[Content_Types].xml' in names
                 
-                if excel_files:
-                    # Sắp xếp tìm file mới nhất. Đầu tiên là parse ngày trong tên file
-                    # VD: FFSTOCK 25-05-2026.xlsx -> 2026, 05, 25
-                    date_pattern = re.compile(r'(\d{1,2})[-_/\s](\d{1,2})[-_/\s](\d{4})')
-                    
-                    def get_file_sort_key(filename):
-                        # 1. Thử parse date trong tên file
-                        match = date_pattern.search(os.path.basename(filename))
-                        if match:
-                            try:
-                                d, m, y = int(match.group(1)), int(match.group(2)), int(match.group(3))
-                                return (2, datetime.date(y, m, d), filename)
-                            except Exception:
-                                pass
-                        # 2. Dùng modification date từ zipinfo làm phương án dự phòng
-                        try:
-                            zinfo = z.getinfo(filename)
-                            dt = datetime.datetime(*zinfo.date_time)
-                            return (1, dt, filename)
-                        except Exception:
-                            pass
-                        # 3. Mặc định dùng tên file sắp xếp bảng chữ cái
-                        return (0, filename, filename)
-                    
-                    excel_files.sort(key=get_file_sort_key, reverse=True)
-                    target_zip_file = excel_files[0]
-                    print(f"📂 Đã tìm thấy {len(excel_files)} file Excel trong thư mục. File mới nhất: {target_zip_file}")
-                    
-                    # Extract file này ra local_path
+                if is_direct_excel:
+                    print("📄 Nhận diện dữ liệu tải về là tệp Excel trực tiếp (.xlsx/.xlsm).")
                     with open(local_path, 'wb') as f:
-                        f.write(z.read(target_zip_file))
-                    print(f"✅ Tải và giải nén thành công file SharePoint: {os.path.basename(local_path)}")
+                        f.write(response_data)
+                    print(f"✅ Tải thành công file SharePoint trực tiếp: {os.path.basename(local_path)}")
                     return True
                 else:
-                    print("❌ Lỗi: Không tìm thấy file Excel hợp lệ nào bên trong tệp ZIP tải về.")
-                    return False
+                    print("📦 Nhận diện dữ liệu tải về là dạng nén ZIP (SharePoint Shared Folder).")
+                    excel_files = []
+                    for name in names:
+                        if name.endswith('/') or os.path.basename(name).startswith('~$'):
+                            continue
+                        ext = os.path.splitext(name)[1].lower()
+                        if ext in ['.xlsx', '.xls', '.xlsm']:
+                            excel_files.append(name)
+                    
+                    if excel_files:
+                        date_pattern = re.compile(r'(\d{1,2})[-_/\s](\d{1,2})[-_/\s](\d{4})')
+                        
+                        def get_file_sort_key(filename):
+                            match = date_pattern.search(os.path.basename(filename))
+                            if match:
+                                try:
+                                    d, m, y = int(match.group(1)), int(match.group(2)), int(match.group(3))
+                                    return (2, datetime.date(y, m, d), filename)
+                                except Exception:
+                                    pass
+                            try:
+                                zinfo = z.getinfo(filename)
+                                dt = datetime.datetime(*zinfo.date_time)
+                                return (1, dt, filename)
+                            except Exception:
+                                pass
+                            return (0, filename, filename)
+                        
+                        excel_files.sort(key=get_file_sort_key, reverse=True)
+                        target_zip_file = excel_files[0]
+                        print(f"📂 Đã tìm thấy {len(excel_files)} file Excel trong thư mục. File mới nhất: {target_zip_file}")
+                        
+                        with open(local_path, 'wb') as f:
+                            f.write(z.read(target_zip_file))
+                        print(f"✅ Tải và giải nén thành công file SharePoint: {os.path.basename(local_path)}")
+                        return True
+                    else:
+                        raise Exception("Không tìm thấy file Excel hợp lệ nào bên trong tệp ZIP tải về.")
         else:
+            # File .xls cổ điển trực tiếp
             with open(local_path, 'wb') as f:
                 f.write(response_data)
-            print(f"✅ Tải thành công file SharePoint trực tiếp: {os.path.basename(local_path)}")
+            print(f"✅ Tải thành công file SharePoint trực tiếp (.xls): {os.path.basename(local_path)}")
             return True
             
     except Exception as e:
