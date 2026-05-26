@@ -218,7 +218,7 @@ def _open_workbook(file_path: str, data_only=True, read_only=True):
 
 def _get_sheet(wb, sheet_name=None):
     """
-    Lấy sheet theo tên. Nếu không chỉ định, trả về sheet cuối.
+    Lấy sheet theo tên. Nếu không chỉ định, trả về sheet hợp lệ cuối cùng.
     Trả về (sheet, tên_sheet) hoặc (None, None).
     """
     if sheet_name:
@@ -232,9 +232,16 @@ def _get_sheet(wb, sheet_name=None):
         print(f"  ⚠️  Không tìm thấy sheet: {sheet_name}")
         return None, None
     else:
-        # Trả về sheet cuối cùng
-        name = wb.sheetnames[-1]
-        return wb[name], name
+        # Trả về sheet hợp lệ cuối cùng (bắt đầu bằng W hoặc w kèm chữ số)
+        # Tránh các sheet trống tự tạo như 'Sheet1' ở cuối
+        target_name = wb.sheetnames[-1]
+        for name in reversed(wb.sheetnames):
+            clean_name = name.strip()
+            if clean_name.upper().startswith('W') and len(clean_name) > 1 and clean_name[1].isdigit():
+                target_name = name
+                break
+        return wb[target_name], target_name
+
 
 
 # Các từ khóa dòng tổng cần bỏ qua trong Forecast
