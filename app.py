@@ -900,11 +900,29 @@ def upload_file(category):
                 
         file.save(target_path)
         
+        # Nếu đang sử dụng PostgreSQL, đồng bộ dữ liệu của file vừa upload lên cloud ngay lập tức
+        if getattr(config, 'USE_POSTGRESQL', False):
+            try:
+                import db_manager
+                db_manager.sync_category_to_db(config, category, getattr(config, 'DB_URI', db_manager.DB_URI))
+                print(f"⚡ Đã đồng bộ tự động dữ liệu upload {category.upper()} lên PostgreSQL!")
+            except Exception as sync_ex:
+                print(f"⚠️ Lỗi đồng bộ dữ liệu upload lên database: {sync_ex}")
+                # Hủy bỏ file vừa lưu để tránh bất đồng bộ
+                try:
+                    os.remove(target_path)
+                except:
+                    pass
+                return jsonify({
+                    'success': False,
+                    'message': f"Upload thành công nhưng đồng bộ lên Database thất bại: {str(sync_ex)}"
+                })
+        
         # Trả về thông tin file mới
         info = get_file_info(None, None, exact_path=target_path)
         return jsonify({
             'success': True,
-            'message': f"Đã upload thành công và lưu vào {os.path.basename(target_path)}",
+            'message': f"Đã upload và đồng bộ thành công dữ liệu {category.upper()} lên hệ thống!",
             'file_info': info
         })
         
