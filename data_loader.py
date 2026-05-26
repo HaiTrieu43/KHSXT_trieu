@@ -115,14 +115,21 @@ def _find_latest_file(directory: str, pattern: str) -> Optional[str]:
     """
     Tìm file mới nhất trong thư mục theo glob pattern.
     Bỏ qua các file tạm thời bắt đầu bằng '~$'.
+    Nếu không tìm thấy ở cấp gốc, tìm đệ quy trong thư mục con.
     Trả về đường dẫn tuyệt đối hoặc None.
     """
     if not os.path.isdir(directory):
         print(f"  ⚠️  Thư mục không tồn tại: {directory}")
         return None
 
+    # Bước 1: Tìm ở cấp gốc (nhanh)
     search_path = os.path.join(directory, pattern)
     files = glob.glob(search_path)
+
+    # Bước 2: Nếu không tìm thấy, tìm đệ quy trong thư mục con
+    if not files:
+        search_path_recursive = os.path.join(directory, '**', pattern)
+        files = glob.glob(search_path_recursive, recursive=True)
 
     # Loại bỏ các file tạm thời (Excel temporary files bắt đầu bằng ~$)
     files = [f for f in files if not os.path.basename(f).startswith('~$')]

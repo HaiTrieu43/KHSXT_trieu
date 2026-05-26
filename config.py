@@ -63,42 +63,51 @@ ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', '123456')
 # ============================================
 # CẤU HÌNH ONEDRIVE ĐỒNG BỘ CỤC BỘ
 # ============================================
-# OneDrive doanh nghiệp tự động tải file SharePoint về thư mục này.
-# Hệ thống sẽ ưu tiên đọc từ thư mục OneDrive, nếu không có sẽ fallback về ổ D:.
+# Khi nhấn "Add shortcut to OneDrive" trên SharePoint, OneDrive tạo thư mục
+# với tên rút gọn (không giữ nguyên cấu trúc SharePoint gốc).
+# Đường dẫn thực tế đã xác minh ngày 26/05/2026.
 
 ONEDRIVE_BASE_DIR = r'C:\Users\haitr\OneDrive - Cong Ty Co Phan Chan Nuoi C.P. Viet Nam'
 
-# Đường dẫn các thư mục OneDrive đã đồng bộ từ SharePoint (sẽ tự phát hiện sau khi sync)
-# Khi bạn nhấn "Sync" trên SharePoint, OneDrive sẽ tạo thư mục tương ứng.
-# Cấu hình bên dưới sẽ được cập nhật sau khi bạn sync xong.
+def _find_onedrive_shortcut(base_dir, keyword):
+    """Tìm thư mục OneDrive shortcut chứa keyword (không phân biệt hoa/thường, bỏ dấu).
+    
+    OneDrive tạo shortcut với tên có dấu VN (VD: 'CPV Document - NĂM 2026').
+    Dùng Unicode NFKD normalize để bỏ dấu trước khi so sánh.
+    """
+    import unicodedata
+    
+    def _strip_accents(s):
+        nfkd = unicodedata.normalize('NFKD', s.lower())
+        return ''.join(c for c in nfkd if not unicodedata.combining(c))
+    
+    if not os.path.isdir(base_dir):
+        return ''
+    keyword_ascii = _strip_accents(keyword)
+    for name in os.listdir(base_dir):
+        full = os.path.join(base_dir, name)
+        if os.path.isdir(full) and keyword_ascii in _strip_accents(name):
+            return full
+    return ''
 
 # --- FFStock (Tồn kho thành phẩm hàng ngày) ---
-ONEDRIVE_FFSTOCK_DIR = os.path.join(
-    ONEDRIVE_BASE_DIR,
-    r'BDG AgroFeed Public\04. Phòng Kho Thành Phẩm\HỒ SƠ ONLINE\11. BÁO CÁO TỒN KHO CÁM HÀNG NGÀY (QT-TP-02.BM08)\NĂM 2026'
-)
+# Thực tế: CPV Document - NAM 2026\FFSTOCK THANG 05-2026\FFSTOCK 22-05-2026.xlsm
+# Shortcut chứa keyword "NAM 2026" thuộc mục BÁO CÁO TỒN KHO CÁM
+ONEDRIVE_FFSTOCK_DIR = _find_onedrive_shortcut(ONEDRIVE_BASE_DIR, 'NAM 2026')
 
-# --- Empty Bag (Bao bì hàng ngày) ---
-ONEDRIVE_EMPTY_BAG_DIR = os.path.join(
-    ONEDRIVE_BASE_DIR,
-    r'BDG AgroFeed Public\04. Phòng Kho Thành Phẩm\HỒ SƠ ONLINE\15. BÁO CÁO TỒN KHO BAO BÌ HÀNG NGÀY (QT-TP-02.BM12)\NĂM 2026'
-)
+# --- Empty Bag (Bao bì hàng ngày) ---  
+# Sẽ có shortcut riêng sau khi sync, chứa keyword tương ứng
+ONEDRIVE_EMPTY_BAG_DIR = _find_onedrive_shortcut(ONEDRIVE_BASE_DIR, 'BAO BI')
 
 # --- Sale Packing Daily (Forecast) ---
-ONEDRIVE_FORECAST_DIR = os.path.join(
-    ONEDRIVE_BASE_DIR,
-    r'BDG AgroFeed Production\File dùng chung\BỘ PHẬN HÀNH CHÁNH\MR NHO\sale packing daily'
-)
+ONEDRIVE_FORECAST_DIR = _find_onedrive_shortcut(ONEDRIVE_BASE_DIR, 'sale packing')
 
 # --- Tồn Bồn (Bin Report) ---
-ONEDRIVE_TONBON_DIR = os.path.join(
-    ONEDRIVE_BASE_DIR,
-    r'BDG AgroFeed Production\File dùng chung\BÁO CÁO VẬN HÀNH SẢN XUẤT\BÁO CÁO BIN-QC\BÁO CÁO TỒN BIN\2026'
-)
+ONEDRIVE_TONBON_DIR = _find_onedrive_shortcut(ONEDRIVE_BASE_DIR, 'TON BIN')
 
 def _pick_dir(onedrive_dir, fallback_dir):
     """Ưu tiên thư mục OneDrive nếu tồn tại, nếu không dùng fallback."""
-    if os.path.isdir(onedrive_dir):
+    if onedrive_dir and os.path.isdir(onedrive_dir):
         return onedrive_dir
     return fallback_dir
 
@@ -107,6 +116,7 @@ FORECAST_DIR = _pick_dir(ONEDRIVE_FORECAST_DIR, FORECAST_DIR)
 FSTOCK_DIR_FFSTOCK = _pick_dir(ONEDRIVE_FFSTOCK_DIR, FSTOCK_DIR)     # Riêng FFStock
 FSTOCK_DIR_EMPTYBAG = _pick_dir(ONEDRIVE_EMPTY_BAG_DIR, FSTOCK_DIR)  # Riêng Empty Bag
 TONBON_DIR = _pick_dir(ONEDRIVE_TONBON_DIR, TONBON_DIR)
+
 
 # Ghi log thư mục đang sử dụng khi khởi chạy
 def _log_active_dirs():
