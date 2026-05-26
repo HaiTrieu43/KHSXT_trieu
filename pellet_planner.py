@@ -98,7 +98,11 @@ def plan_pellet_shifts(demand_list, tonbon_detail, congsuat_dict, fix_code_pelle
     # Duyệt qua các bồn để phân bổ tồn đầu cho máy PL tương ứng
     # Đối với PL6 & PL7 dùng chung bồn 129 và 130
     pl6_7_silos = {}
-    for silo_num, data_item in tonbon_detail.items():
+    for silo_num_key, data_item in tonbon_detail.items():
+        try:
+            silo_num = int(silo_num_key)
+        except (ValueError, TypeError):
+            continue
         prod = data_item.get('product', data_item.get('product_code', ''))
         tons = data_item['tons']
         if silo_num in (129, 130):

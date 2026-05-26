@@ -358,7 +358,7 @@ def sync_local_to_db(config, conn_str=DB_URI):
     print("📤 Đang đồng bộ Chi tiết Bồn chứa...")
     tbd_data = []
     for b_id, item in data.get('tonbon_detail', {}).items():
-        tbd_data.append((b_id, item.get('product_code', ''), item.get('tons', 0.0)))
+        tbd_data.append((b_id, item.get('product', item.get('product_code', '')), item.get('tons', 0.0)))
     if tbd_data:
         execute_values(cur, "INSERT INTO tonbon_detail (bon_id, product_code, tons) VALUES %s", tbd_data)
 
@@ -942,7 +942,7 @@ def sync_category_to_db(config, category, conn_str=DB_URI) -> dict:
                 
             tbd_data = []
             for b_id, item in tonbon_detail.items():
-                tbd_data.append((b_id, item.get('product_code', ''), item.get('tons', 0.0)))
+                tbd_data.append((b_id, item.get('product', item.get('product_code', '')), item.get('tons', 0.0)))
             if tbd_data:
                 execute_values(cur, "INSERT INTO tonbon_detail (bon_id, product_code, tons) VALUES %s", tbd_data)
                 
