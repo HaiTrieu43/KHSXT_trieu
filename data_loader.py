@@ -2361,6 +2361,49 @@ def enrich_congsuat(data: dict):
             congsuat[name_norm] = spec
 
 
+def get_tonbon_actual_date(file_path: str) -> Optional[str]:
+    """Tìm ngày thực tế (sheet ngày lớn nhất có dữ liệu) và ghép với Tháng.Năm từ tên file."""
+    if not os.path.exists(file_path):
+        return None
+    wb = _open_workbook(file_path, read_only=True)
+    if wb is None:
+        return None
+        
+    numeric_sheets = []
+    for name in wb.sheetnames:
+        try:
+            numeric_sheets.append(int(name))
+        except ValueError:
+            continue
+            
+    sheet_name = None
+    for num in sorted(numeric_sheets, reverse=True):
+        ws_test = wb[str(num)]
+        has_data = False
+        # Quét nhanh xem có dữ liệu không
+        for row in ws_test.iter_rows(min_row=10, max_row=45, max_col=8, values_only=True):
+            if len(row) > 2 and row[1] and _safe_float(row[2]) > 0:
+                has_data = True
+                break
+            if len(row) > 6 and row[5] and _safe_float(row[6]) > 0:
+                has_data = True
+                break
+        if has_data:
+            sheet_name = str(num)
+            break
+            
+    wb.close()
+    
+    if sheet_name:
+        # Trích xuất Tháng.Năm từ tên file (ví dụ: 05.2026 hoặc 5-2026)
+        filename = os.path.basename(file_path)
+        match = re.search(r'(\d{1,2})[-_./\s](\d{4})', filename)
+        if match:
+            month = match.group(1).zfill(2)
+            year = match.group(2)
+            return f"{sheet_name.zfill(2)}-{month}-{year}"
+    return None
+
 
 # ============================================================
 # 12. LOAD ALL DATA
@@ -2570,13 +2613,22 @@ def load_all_data(config, target_date=None) -> dict:
             code_mapping[spec.product_code] = spec.product_name  # Override Code sheet nếu khác
     data['code_mapping'] = code_mapping
     
+    # Lấy ngày Tồn bồn thực tế từ sheet để đính kèm vào metadata
+    tonbon_meta = None
+    if tonbon_file:
+        actual_date = get_tonbon_actual_date(tonbon_file)
+        if actual_date:
+            tonbon_meta = f"{os.path.basename(tonbon_file)} [DATE: {actual_date}]"
+        else:
+            tonbon_meta = os.path.basename(tonbon_file)
+
     # Lưu metadata các file đã nạp để phục vụ đồng bộ dữ liệu tươi mới
     data['_file_info'] = {
         'forecast': os.path.basename(forecast_file) if forecast_file else None,
         'silo_plan': os.path.basename(silo_file) if silo_file else None,
         'bacang': os.path.basename(bacang_file) if bacang_file else None,
         'ffstock': os.path.basename(ffstock_file) if ffstock_file else None,
-        'tonbon': os.path.basename(tonbon_file) if tonbon_file else None,
+        'tonbon': tonbon_meta,
         'empty_bag': os.path.basename(bag_file) if bag_file else None,
     }
     

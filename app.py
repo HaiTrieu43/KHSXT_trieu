@@ -264,6 +264,16 @@ def get_data_freshness():
     # Các hàm trợ giúp trích xuất ngày và tuần từ tên file
     def _extract_date_from_filename(filename, date_regex):
         if not filename: return None
+        # Kiểm tra nếu tên file có đính kèm metadata ngày đặc biệt dạng [DATE: dd-mm-yyyy]
+        date_meta = re.search(r'\[DATE:\s*(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})\]', filename)
+        if date_meta:
+            try:
+                d, m, y = int(date_meta.group(1)), int(date_meta.group(2)), int(date_meta.group(3))
+                if y < 100: y += 2000
+                return datetime.date(y, m, d)
+            except:
+                pass
+                
         match = re.search(date_regex, filename)
         if match:
             groups = match.groups()
@@ -363,11 +373,22 @@ def get_data_freshness():
             )
             
             # 3. Tồn Bồn — Báo cáo hàng ngày
-            tonbon_date = _extract_date_from_files(
-                config.TONBON_DIR, '*ton bon*.*',
-                r'(\d{1,2})\s*[-./:]\s*(\d{1,2})\s*[-./:]\s*(\d{2,4})',
-                'Tồn Bồn'
-            )
+            import data_loader
+            tonbon_file = data_loader._find_latest_file(config.TONBON_DIR, '*ton bon*.*')
+            if not tonbon_file:
+                fallback_dir = getattr(config, 'TONBON_DIR_FALLBACK', None)
+                if fallback_dir and fallback_dir != config.TONBON_DIR:
+                    tonbon_file = data_loader._find_latest_file(fallback_dir, '*ton bon*.*')
+                    
+            tonbon_date = None
+            if tonbon_file:
+                actual_tb_date = data_loader.get_tonbon_actual_date(tonbon_file)
+                if actual_tb_date:
+                    try:
+                        d, m, y = map(int, actual_tb_date.split('-'))
+                        tonbon_date = datetime.date(y, m, d)
+                    except:
+                        pass
             
             # 4. Forecast — Báo cáo tuần
             forecast_week, forecast_range = _extract_week_from_files(
