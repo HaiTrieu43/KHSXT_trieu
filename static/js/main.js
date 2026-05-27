@@ -398,6 +398,138 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ----------------------------------------------------------------------
+    // 5B. DATA FRESHNESS ALERT SYSTEM
+    // ----------------------------------------------------------------------
+    async function loadDataFreshness() {
+        try {
+            const res = await fetch('/api/data-freshness');
+            const json = await res.json();
+            
+            if (!json.success) return;
+            
+            const panel = document.getElementById('freshness-alert-panel');
+            const alertsList = document.getElementById('freshness-alerts-list');
+            const sourcesSummary = document.getElementById('freshness-sources-summary');
+            const badge = document.getElementById('freshness-badge');
+            const subtitle = document.getElementById('freshness-subtitle');
+            const headerIcon = document.getElementById('freshness-header-icon');
+            
+            if (!panel || !alertsList) return;
+            
+            const warnings = json.warnings || [];
+            const hasCritical = json.has_critical;
+            
+            // Always show the panel — show OK status or warnings
+            panel.style.display = 'block';
+            
+            // Update panel class based on severity
+            panel.classList.remove('all-ok', 'has-critical');
+            if (warnings.length === 0) {
+                panel.classList.add('all-ok');
+                headerIcon.textContent = '✅';
+                badge.textContent = 'Đầy đủ dữ liệu';
+                badge.className = 'badge badge-success';
+                subtitle.textContent = `Ngày tham chiếu: ${json.reference_date || '--'} | Tuần ${json.current_week}`;
+                alertsList.innerHTML = `
+                    <div class="freshness-alert-item level-info" style="border-color: rgba(16, 185, 129, 0.2); background: rgba(16, 185, 129, 0.05);">
+                        <span class="freshness-alert-icon">✅</span>
+                        <div class="freshness-alert-content">
+                            <div class="freshness-alert-source" style="color: var(--emerald);">Tất cả báo cáo đầy đủ</div>
+                            <div class="freshness-alert-message">Dữ liệu FFStock, Empty Bag, Tồn Bồn, Forecast, SILO đều đã cập nhật. Sẵn sàng lập kế hoạch.</div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                if (hasCritical) {
+                    panel.classList.add('has-critical');
+                    headerIcon.textContent = '🚨';
+                    badge.textContent = `${warnings.length} cảnh báo`;
+                    badge.className = 'badge badge-danger';
+                } else {
+                    headerIcon.textContent = '⚠️';
+                    badge.textContent = `${warnings.length} cảnh báo`;
+                    badge.className = 'badge badge-warning';
+                }
+                
+                subtitle.textContent = `Ngày tham chiếu (FFStock): ${json.reference_date || '--'} | Tuần ${json.current_week} | Hôm nay: ${json.current_date}`;
+                
+                // Render warning items
+                let alertsHTML = '';
+                warnings.forEach(w => {
+                    const levelClass = w.level === 'critical' ? 'level-critical' : 'level-warning';
+                    const sourceClass = w.level === 'critical' ? 'text-critical' : 'text-warning';
+                    
+                    alertsHTML += `
+                        <div class="freshness-alert-item ${levelClass}">
+                            <span class="freshness-alert-icon">${w.icon || '⚠️'}</span>
+                            <div class="freshness-alert-content">
+                                <div class="freshness-alert-source ${sourceClass}">${w.source}</div>
+                                <div class="freshness-alert-message">${w.message}</div>
+                                ${w.action ? `<div class="freshness-alert-action">💡 ${w.action}</div>` : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+                alertsList.innerHTML = alertsHTML;
+            }
+            
+            // Render source date summary chips
+            if (json.sources && sourcesSummary) {
+                let chipsHTML = '';
+                
+                for (const [key, src] of Object.entries(json.sources)) {
+                    let chipClass = 'chip-ok';
+                    let dateText = '';
+                    
+                    if (src.date) {
+                        // Daily source
+                        const daysOff = src.days_from_ref || 0;
+                        if (daysOff > 1) chipClass = 'chip-critical';
+                        else if (daysOff > 0) chipClass = 'chip-stale';
+                        dateText = src.date;
+                    } else if (src.week !== undefined) {
+                        // Weekly source
+                        chipClass = src.is_current_week ? 'chip-ok' : 'chip-stale';
+                        dateText = `W${src.week}${src.range ? ' (' + src.range + ')' : ''}`;
+                    }
+                    
+                    chipsHTML += `
+                        <span class="freshness-source-chip ${chipClass}">
+                            <span class="chip-dot"></span>
+                            ${src.label}: ${dateText}
+                        </span>
+                    `;
+                }
+                
+                sourcesSummary.innerHTML = chipsHTML;
+            }
+            
+        } catch (err) {
+            console.error('Freshness check error:', err);
+        }
+    }
+    
+    // Toggle collapse/expand for freshness panel
+    const btnToggleFreshness = document.getElementById('btn-toggle-freshness');
+    if (btnToggleFreshness) {
+        btnToggleFreshness.addEventListener('click', () => {
+            const body = document.getElementById('freshness-body');
+            const chevron = document.getElementById('freshness-chevron');
+            if (body) {
+                body.classList.toggle('collapsed');
+                // Rotate chevron
+                if (chevron) {
+                    if (body.classList.contains('collapsed')) {
+                        chevron.style.transform = 'rotate(180deg)';
+                    } else {
+                        chevron.style.transform = 'rotate(0deg)';
+                    }
+                }
+            }
+        });
+    }
+
+    // ----------------------------------------------------------------------
     // 6. DETAIL VIEW & DRAG-AND-DROP FILE UPLOADER
     // ----------------------------------------------------------------------
     async function loadCategoryDetails(category) {
@@ -1819,5 +1951,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     loadDataSourcesStatus();
+    loadDataFreshness();
     initAutoPlanDetection();
 });

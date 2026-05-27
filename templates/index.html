@@ -276,6 +276,33 @@
                             </div>
                         </div>
 
+                        <!-- Data Freshness Alert Panel -->
+                        <div class="bento-card col-span-3 glass-card freshness-alert-panel" id="freshness-alert-panel" style="display: none;">
+                            <div class="card-header flex-between" style="margin-bottom: 0.75rem;">
+                                <div class="header-left flex-center gap-2">
+                                    <span class="freshness-icon" id="freshness-header-icon">⚠️</span>
+                                    <div>
+                                        <h2 class="card-title" id="freshness-title">Kiểm Tra Dữ Liệu Đầu Vào</h2>
+                                        <p class="text-muted" id="freshness-subtitle" style="font-size: 0.75rem; margin-top: 2px;">Ngày tham chiếu (FFStock): --</p>
+                                    </div>
+                                </div>
+                                <div class="header-right flex-center gap-2">
+                                    <span class="badge" id="freshness-badge">--</span>
+                                    <button class="btn btn-secondary btn-xs" id="btn-toggle-freshness" title="Thu gọn/Mở rộng">
+                                        <i data-lucide="chevron-up" id="freshness-chevron"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="freshness-body" id="freshness-body">
+                                <div class="freshness-alerts-list" id="freshness-alerts-list">
+                                    <!-- Dynamic warning items -->
+                                </div>
+                                <div class="freshness-sources-summary" id="freshness-sources-summary" style="margin-top: 0.75rem;">
+                                    <!-- Source date summary chips -->
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Kế Hoạch Sản Xuất Tự Động Ngày Mục Tiêu Bento Card -->
                         <div class="bento-card col-span-3 glass-card dashboard-plan-card" id="dashboard-plan-card" style="display: block; border-left: 4px solid var(--cyan);">
                             <div class="card-header flex-between">

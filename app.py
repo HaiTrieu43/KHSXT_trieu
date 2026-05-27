@@ -207,6 +207,278 @@ def get_data_status():
         return jsonify({'success': False, 'message': str(e)})
 
 
+@app.route('/api/data-freshness', methods=['GET'])
+def get_data_freshness():
+    """Kiểm tra độ tươi mới của dữ liệu: so sánh ngày báo cáo giữa các nguồn.
+    
+    Logic:
+    - FFStock là báo cáo tham chiếu (anchor) — ngày FFStock mới nhất = ngày chuẩn
+    - Các báo cáo hàng ngày (Empty Bag, Tồn Bồn) phải cùng ngày hoặc không quá 1 ngày
+    - Các báo cáo hàng tuần (Forecast, SILO, Ba Cảng) phải cùng tuần
+    """
+    import re
+    import glob
+    
+    warnings = []
+    source_dates = {}
+    
+    def _extract_date_from_files(directory, pattern, date_regex, source_name):
+        """Trích xuất ngày mới nhất từ tên file."""
+        if not directory or not os.path.isdir(directory):
+            return None
+        
+        # Tìm file mới nhất theo pattern (recursive)
+        search_pattern = os.path.join(directory, '**', pattern)
+        files = glob.glob(search_pattern, recursive=True)
+        files = [f for f in files if not os.path.basename(f).startswith('~$')]
+        
+        if not files:
+            return None
+        
+        dates = []
+        for filepath in files:
+            filename = os.path.basename(filepath)
+            match = re.search(date_regex, filename)
+            if match:
+                groups = match.groups()
+                try:
+                    if len(groups) == 3:
+                        d, m, y = int(groups[0]), int(groups[1]), int(groups[2])
+                        if y < 100: y += 2000
+                        dt = datetime.date(y, m, d)
+                        dates.append(dt)
+                except (ValueError, OverflowError):
+                    pass
+        
+        return max(dates) if dates else None
+    
+    def _extract_week_from_files(directory, pattern, source_name):
+        """Trích xuất tuần mới nhất từ tên file Forecast/SILO."""
+        if not directory or not os.path.isdir(directory):
+            return None, None
+        
+        search_pattern = os.path.join(directory, '**', pattern)
+        files = glob.glob(search_pattern, recursive=True)
+        files = [f for f in files if not os.path.basename(f).startswith('~$')]
+        
+        if not files:
+            return None, None
+        
+        best_week = None
+        best_range = None
+        for filepath in files:
+            filename = os.path.basename(filepath)
+            # Pattern: W22.(25-30-05-) or W21-18-23-05-2026
+            wk_match = re.search(r'W(\d+)', filename, re.IGNORECASE)
+            if wk_match:
+                week_num = int(wk_match.group(1))
+                # Tìm date range trong tên file
+                range_match = re.search(r'(\d{1,2})\s*[-/]\s*(\d{1,2})\s*[-/]\s*(\d{1,2})', filename)
+                if range_match:
+                    best_range = f"{range_match.group(1)}-{range_match.group(2)}/{range_match.group(3)}"
+                if best_week is None or week_num > best_week:
+                    best_week = week_num
+        
+        return best_week, best_range
+    
+    try:
+        # 1. FFStock — Báo cáo tham chiếu (anchor)
+        ffstock_dir = getattr(config, 'FSTOCK_DIR_FFSTOCK', config.FSTOCK_DIR)
+        ffstock_date = _extract_date_from_files(
+            ffstock_dir, '*FFSTOCK*.xls*',
+            r'FFSTOCK\s*(\d{1,2})\s*[-/:.\s]\s*(\d{1,2})\s*[-/:.\s]\s*(\d{2,4})',
+            'FFStock'
+        )
+        if ffstock_date:
+            source_dates['ffstock'] = {'date': ffstock_date, 'label': 'FFStock Tồn Kho'}
+        
+        # 2. Empty Bag — Báo cáo hàng ngày
+        emptybag_dir = getattr(config, 'FSTOCK_DIR_EMPTYBAG', config.FSTOCK_DIR)
+        emptybag_date = _extract_date_from_files(
+            emptybag_dir, '*EMPTY BAG*.xls*',
+            r'(\d{1,2})\s*[-/:.\s]\s*(\d{1,2})\s*[-/:.\s]\s*(\d{2,4})',
+            'Empty Bag'
+        )
+        if emptybag_date:
+            source_dates['empty_bag'] = {'date': emptybag_date, 'label': 'Bao Bì (Empty Bag)'}
+        
+        # 3. Tồn Bồn — Báo cáo hàng ngày
+        tonbon_date = _extract_date_from_files(
+            config.TONBON_DIR, '*ton bon*.*',
+            r'(\d{1,2})\s*[-./:]\s*(\d{1,2})\s*[-./:]\s*(\d{2,4})',
+            'Tồn Bồn'
+        )
+        if tonbon_date:
+            source_dates['tonbon'] = {'date': tonbon_date, 'label': 'Tồn Bồn Thành Phẩm'}
+        
+        # 4. Forecast — Báo cáo tuần
+        forecast_dir = config.FORECAST_DIR
+        forecast_week, forecast_range = _extract_week_from_files(
+            forecast_dir, '*FORECAST*.xlsx', 'Forecast'
+        )
+        
+        # 5. SILO — Báo cáo tuần
+        silo_week, silo_range = _extract_week_from_files(
+            config.SILO_DIR, '*SILO*.xlsx', 'SILO'
+        )
+        
+        # 6. Ba Cảng — Báo cáo tuần (không có week number rõ ràng, dùng mtime)
+        bacang_dir = config.BACANG_DIR
+        bacang_files = glob.glob(os.path.join(bacang_dir, '*CANG*.xlsx')) if os.path.isdir(bacang_dir) else []
+        bacang_files = [f for f in bacang_files if not os.path.basename(f).startswith('~$')]
+        bacang_mtime = None
+        if bacang_files:
+            latest_bc = max(bacang_files, key=os.path.getmtime)
+            bacang_mtime = datetime.date.fromtimestamp(os.path.getmtime(latest_bc))
+        
+        # === SO SÁNH VÀ TẠO CẢNH BÁO ===
+        
+        today = datetime.date.today()
+        anchor_date = ffstock_date  # FFStock là ngày chuẩn
+        
+        if not anchor_date:
+            warnings.append({
+                'level': 'critical',
+                'source': 'FFStock',
+                'message': 'Không tìm thấy file FFStock — không thể xác định ngày tham chiếu!',
+                'icon': '🚫'
+            })
+        else:
+            # Cảnh báo nếu FFStock cũng đã cũ so với hôm nay
+            days_old = (today - anchor_date).days
+            if days_old > 2:
+                warnings.append({
+                    'level': 'warning',
+                    'source': 'FFStock',
+                    'message': f'FFStock mới nhất ngày {anchor_date.strftime("%d/%m/%Y")} — cũ hơn {days_old} ngày so với hôm nay ({today.strftime("%d/%m/%Y")})',
+                    'icon': '📦'
+                })
+            
+            # So sánh Empty Bag vs FFStock
+            if emptybag_date:
+                delta = (anchor_date - emptybag_date).days
+                if delta > 0:
+                    warnings.append({
+                        'level': 'critical' if delta > 1 else 'warning',
+                        'source': 'Empty Bag',
+                        'message': f'Báo cáo Bao Bì mới nhất ngày {emptybag_date.strftime("%d/%m/%Y")} — THIẾU {delta} ngày so với FFStock ({anchor_date.strftime("%d/%m/%Y")})',
+                        'icon': '📋',
+                        'action': 'Kiểm tra và upload báo cáo Empty Bag mới nhất'
+                    })
+            else:
+                warnings.append({
+                    'level': 'critical',
+                    'source': 'Empty Bag',
+                    'message': 'Không tìm thấy file báo cáo Bao Bì (Empty Bag)!',
+                    'icon': '📋'
+                })
+            
+            # So sánh Tồn Bồn vs FFStock  
+            if tonbon_date:
+                delta = (anchor_date - tonbon_date).days
+                if delta > 0:
+                    warnings.append({
+                        'level': 'critical' if delta > 1 else 'warning',
+                        'source': 'Tồn Bồn',
+                        'message': f'Báo cáo Tồn Bồn mới nhất ngày {tonbon_date.strftime("%d/%m/%Y")} — THIẾU {delta} ngày so với FFStock ({anchor_date.strftime("%d/%m/%Y")})',
+                        'icon': '🏭',
+                        'action': 'Kiểm tra và upload báo cáo Tồn Bồn mới nhất'
+                    })
+            else:
+                warnings.append({
+                    'level': 'warning',
+                    'source': 'Tồn Bồn',
+                    'message': 'Không tìm thấy file báo cáo Tồn Bồn!',
+                    'icon': '🏭'
+                })
+        
+        # So sánh báo cáo tuần: Forecast vs SILO
+        current_week = today.isocalendar()[1]
+        
+        if forecast_week:
+            if forecast_week < current_week:
+                warnings.append({
+                    'level': 'warning',
+                    'source': 'Forecast',
+                    'message': f'Forecast đang ở Tuần {forecast_week} ({forecast_range or "?"}) — hiện tại là Tuần {current_week}',
+                    'icon': '📊',
+                    'action': 'Cần upload Forecast tuần mới'
+                })
+        else:
+            warnings.append({
+                'level': 'critical',
+                'source': 'Forecast',
+                'message': 'Không tìm thấy file Forecast!',
+                'icon': '📊'
+            })
+        
+        if silo_week:
+            if silo_week < current_week:
+                warnings.append({
+                    'level': 'warning',
+                    'source': 'SILO',
+                    'message': f'Kế hoạch SILO đang ở Tuần {silo_week} ({silo_range or "?"}) — hiện tại là Tuần {current_week}',
+                    'icon': '🏗️',
+                    'action': 'Cần upload kế hoạch SILO tuần mới'
+                })
+        else:
+            warnings.append({
+                'level': 'warning',
+                'source': 'SILO',
+                'message': 'Không tìm thấy file kế hoạch SILO!',
+                'icon': '🏗️'
+            })
+        
+        # Ba Cảng — kiểm tra mtime
+        if bacang_mtime:
+            bc_days_old = (today - bacang_mtime).days
+            if bc_days_old > 7:
+                warnings.append({
+                    'level': 'warning',
+                    'source': 'Ba Cảng',
+                    'message': f'Kế hoạch Ba Cảng chưa cập nhật — file cũ {bc_days_old} ngày',
+                    'icon': '⚓',
+                    'action': 'Cần upload kế hoạch Ba Cảng tuần mới'
+                })
+        
+        # Build response
+        response = {
+            'success': True,
+            'reference_date': anchor_date.strftime('%d/%m/%Y') if anchor_date else None,
+            'current_date': today.strftime('%d/%m/%Y'),
+            'current_week': current_week,
+            'sources': {},
+            'warnings': warnings,
+            'warning_count': len(warnings),
+            'has_critical': any(w['level'] == 'critical' for w in warnings)
+        }
+        
+        # Tóm tắt ngày mỗi nguồn
+        for key, info in source_dates.items():
+            response['sources'][key] = {
+                'date': info['date'].strftime('%d/%m/%Y'),
+                'label': info['label'],
+                'days_from_ref': (anchor_date - info['date']).days if anchor_date else None
+            }
+        
+        if forecast_week:
+            response['sources']['forecast'] = {
+                'week': forecast_week, 'range': forecast_range, 'label': 'Forecast Tuần',
+                'is_current_week': forecast_week >= current_week
+            }
+        if silo_week:
+            response['sources']['silo'] = {
+                'week': silo_week, 'range': silo_range, 'label': 'SILO Tuần',
+                'is_current_week': silo_week >= current_week
+            }
+        
+        return jsonify(response)
+        
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': str(e), 'warnings': []})
+
+
 @app.route('/api/latest-target-date', methods=['GET'])
 def get_latest_target_date():
     """Tự động quét tìm ngày dữ liệu FFSTOCK mới nhất và tính toán ngày mục tiêu tiếp theo"""

@@ -2274,3 +2274,166 @@ body {
     font-weight: 600 !important;
 }
 
+/* --------------------------------------------------------------------------
+   12. DATA FRESHNESS ALERT PANEL
+   -------------------------------------------------------------------------- */
+.freshness-alert-panel {
+    border-left: 4px solid var(--amber);
+    animation: fadeIn 0.4s ease-out;
+    transition: all 0.3s ease;
+}
+
+.freshness-alert-panel.all-ok {
+    border-left-color: var(--emerald);
+}
+
+.freshness-alert-panel.has-critical {
+    border-left-color: var(--rose);
+    animation: pulse-freshness 3s infinite ease-in-out;
+}
+
+@keyframes pulse-freshness {
+    0%, 100% {
+        box-shadow: 0 0 8px rgba(244, 63, 94, 0.1);
+    }
+    50% {
+        box-shadow: 0 0 16px rgba(244, 63, 94, 0.25);
+    }
+}
+
+.freshness-icon {
+    font-size: 1.5rem;
+    line-height: 1;
+}
+
+.freshness-body {
+    transition: max-height 0.4s ease, opacity 0.3s ease;
+    overflow: hidden;
+}
+
+.freshness-body.collapsed {
+    max-height: 0 !important;
+    opacity: 0;
+    margin: 0;
+    padding: 0;
+}
+
+/* Alert items */
+.freshness-alert-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.6rem 0.85rem;
+    border-radius: var(--radius-sm);
+    margin-bottom: 0.4rem;
+    transition: var(--transition-smooth);
+    border: 1px solid transparent;
+}
+
+.freshness-alert-item:hover {
+    transform: translateX(4px);
+}
+
+.freshness-alert-item.level-critical {
+    background: rgba(244, 63, 94, 0.08);
+    border-color: rgba(244, 63, 94, 0.2);
+}
+
+.freshness-alert-item.level-warning {
+    background: rgba(234, 179, 8, 0.06);
+    border-color: rgba(234, 179, 8, 0.15);
+}
+
+.freshness-alert-item.level-info {
+    background: rgba(6, 182, 212, 0.05);
+    border-color: rgba(6, 182, 212, 0.15);
+}
+
+.freshness-alert-icon {
+    font-size: 1.1rem;
+    line-height: 1;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.freshness-alert-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.freshness-alert-source {
+    font-weight: 700;
+    font-size: 0.78rem;
+    margin-bottom: 1px;
+}
+
+.freshness-alert-source.text-critical { color: var(--rose); }
+.freshness-alert-source.text-warning { color: var(--amber); }
+
+.freshness-alert-message {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.freshness-alert-action {
+    font-size: 0.68rem;
+    color: var(--cyan);
+    font-weight: 500;
+    margin-top: 2px;
+    font-style: italic;
+}
+
+/* Source date summary chips */
+.freshness-sources-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.freshness-source-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.65rem;
+    border-radius: 20px;
+    font-size: 0.68rem;
+    font-weight: 500;
+    border: 1px solid var(--border-color);
+    background: rgba(255, 255, 255, 0.02);
+    transition: var(--transition-smooth);
+}
+
+.freshness-source-chip:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(6, 182, 212, 0.3);
+}
+
+.freshness-source-chip.chip-ok {
+    border-color: rgba(16, 185, 129, 0.3);
+    color: var(--emerald);
+}
+
+.freshness-source-chip.chip-stale {
+    border-color: rgba(234, 179, 8, 0.3);
+    color: var(--amber);
+}
+
+.freshness-source-chip.chip-critical {
+    border-color: rgba(244, 63, 94, 0.3);
+    color: var(--rose);
+}
+
+.freshness-source-chip .chip-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.chip-ok .chip-dot { background: var(--emerald); }
+.chip-stale .chip-dot { background: var(--amber); }
+.chip-critical .chip-dot { background: var(--rose); }
+
