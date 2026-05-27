@@ -4,6 +4,7 @@ Tự động khởi tạo cấu trúc bảng, đồng bộ dữ liệu Excel lê
 và đọc dữ liệu trực tiếp phục vụ giải thuật KHSX mà không cần file Excel.
 """
 import sys
+import os
 import psycopg2
 from psycopg2.extras import execute_values
 from datetime import datetime, date
@@ -142,6 +143,7 @@ def init_db(conn_str=DB_URI):
     CREATE TABLE IF NOT EXISTS congsuat (
         id SERIAL PRIMARY KEY,
         product_code VARCHAR(50),
+        product_name VARCHAR(100),
         formular_code VARCHAR(100),
         die_size FLOAT,
         ton_per_batch FLOAT,
@@ -150,6 +152,18 @@ def init_db(conn_str=DB_URI):
         ks_code VARCHAR(100)
     );
     """)
+    # Bảo đảm cột product_name tồn tại cho các DB cũ
+    cur.execute("ALTER TABLE congsuat ADD COLUMN IF NOT EXISTS product_name VARCHAR(100);")
+
+    # 9b. Bảng code_mapping (tra cứu chéo mã số ↔ tên cám)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS code_mapping (
+        id SERIAL PRIMARY KEY,
+        digit_code VARCHAR(50) UNIQUE,
+        colloquial_name VARCHAR(100)
+    );
+    """)
+
 
     # 10. Bảng stt_khangsinh (cấp độ)
     cur.execute("""
@@ -374,17 +388,30 @@ def sync_local_to_db(config, conn_str=DB_URI):
     # 9. Đồng bộ congsuat
     print("📤 Đang đồng bộ Công suất & Specs...")
     cs_data = []
+    seen_codes = set()
     for p, spec in data.get('congsuat', {}).items():
-        cs_data.append((
-            p, spec.formular_code, spec.die_size, spec.ton_per_batch,
-            spec.line_cv, spec.line_pk, spec.ks_code
-        ))
+        if spec.product_code not in seen_codes:
+            seen_codes.add(spec.product_code)
+            cs_data.append((
+                spec.product_code, spec.product_name, spec.formular_code, spec.die_size,
+                spec.ton_per_batch, spec.line_cv, spec.line_pk, spec.ks_code
+            ))
     if cs_data:
         execute_values(cur, """
         INSERT INTO congsuat (
-            product_code, formular_code, die_size, ton_per_batch, line_cv, line_pk, ks_code
+            product_code, product_name, formular_code, die_size, ton_per_batch, line_cv, line_pk, ks_code
         ) VALUES %s
         """, cs_data)
+
+    # 9b. Đồng bộ code_mapping
+    print("📤 Đang đồng bộ Từ điển mã cám...")
+    cur.execute("DELETE FROM code_mapping;")
+    cm_data = []
+    for digit_code, colloquial_name in data.get('code_mapping', {}).items():
+        if digit_code and colloquial_name:
+            cm_data.append((digit_code, colloquial_name))
+    if cm_data:
+        execute_values(cur, "INSERT INTO code_mapping (digit_code, colloquial_name) VALUES %s ON CONFLICT (digit_code) DO UPDATE SET colloquial_name = EXCLUDED.colloquial_name", cm_data)
 
     # 10. Đồng bộ stt_khangsinh
     print("📤 Đang đồng bộ Cấp độ kháng sinh...")
@@ -398,6 +425,8 @@ def sync_local_to_db(config, conn_str=DB_URI):
     print("📤 Đang đồng bộ Ma trận Pellet...")
     fcp_data = []
     for p, cfg in data.get('fix_code_pellet', {}).items():
+        if p == '_die_mapping' or not isinstance(cfg, dict) or 'priorities' not in cfg:
+            continue  # Bỏ qua key đặc biệt _die_mapping
         pr = cfg.get('priorities', [])
         p1 = pr[0] if len(pr) > 0 else ''
         p2 = pr[1] if len(pr) > 1 else ''
@@ -626,16 +655,36 @@ def load_all_data_from_db(conn_str=DB_URI, target_date=None) -> dict:
     data['empty_bag'] = empty_bag
 
     # 9. Congsuat
-    cur.execute("SELECT product_code, formular_code, die_size, ton_per_batch, line_cv, line_pk, ks_code FROM congsuat;")
+    cur.execute("SELECT product_code, product_name, formular_code, die_size, ton_per_batch, line_cv, line_pk, ks_code FROM congsuat;")
     cs_rows = cur.fetchall()
     congsuat = {}
+    code_mapping = {}
     for r in cs_rows:
-        p, f_code, d_size, tpb, l_cv, l_pk, ks = r
-        congsuat[p] = ProductSpec(
-            product_code=p, formular_code=f_code, die_size=d_size,
-            ton_per_batch=tpb, line_cv=l_cv, line_pk=l_pk, ks_code=ks
+        p, p_name, f_code, d_size, tpb, l_cv, l_pk, ks = r
+        p_name = p_name or p or ''
+        spec = ProductSpec(
+            product_code=p, product_name=p_name, formular_code=f_code or '', die_size=d_size or 0.0,
+            ton_per_batch=tpb or 8.4, line_cv=l_cv or '', line_pk=l_pk or '', ks_code=ks or ''
         )
+        # Register both keys
+        congsuat[p] = spec
+        if p_name and p_name != p:
+            congsuat[p_name] = spec
+            code_mapping[p] = p_name
+            
     data['congsuat'] = congsuat
+    
+    # 9b. Nạp code_mapping từ bảng riêng (đầy đủ hơn so với chỉ từ congsuat)
+    try:
+        cur.execute("SELECT digit_code, colloquial_name FROM code_mapping;")
+        cm_rows = cur.fetchall()
+        for digit_code, colloquial_name in cm_rows:
+            if digit_code and colloquial_name:
+                code_mapping[digit_code] = colloquial_name
+    except Exception:
+        pass  # Bảng chưa tồn tại trên DB cũ
+    data['code_mapping'] = code_mapping
+
 
     # 10. STT Khangsinh
     cur.execute("SELECT ks_level, ks_name FROM stt_khangsinh;")
@@ -662,6 +711,20 @@ def load_all_data_from_db(conn_str=DB_URI, target_date=None) -> dict:
             'priorities': pr
         }
     data['fix_code_pellet'] = fix_code_pellet
+    
+    # Rebuild _die_mapping từ Plan.xlsm nếu file tồn tại
+    import config as cfg_module
+    plan_file = getattr(cfg_module, 'PLAN_FILE', None)
+    if plan_file and os.path.isfile(plan_file):
+        try:
+            from data_loader import load_fix_code_pellet
+            full_fix_code = load_fix_code_pellet(plan_file)
+            dm = full_fix_code.get('_die_mapping', {})
+            if dm:
+                fix_code_pellet['_die_mapping'] = dm
+                print(f"  📐 Nạp die_mapping từ Plan.xlsm: {len(dm)} sản phẩm")
+        except Exception as e:
+            print(f"  ⚠️ Không nạp được die_mapping từ Plan.xlsm: {e}")
 
     # 12. Feedcode
     cur.execute("SELECT product_code, line_cv, line_pk FROM feedcode;")

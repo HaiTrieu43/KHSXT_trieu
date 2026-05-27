@@ -33,6 +33,41 @@ SILO_MAPPING = {
 }
 
 
+def get_die_size(product_code, congsuat_dict, fix_code_pellet_dict):
+    """
+    Lấy kích thước khuôn (die size) của sản phẩm.
+    Tra cứu từ bảng _die_mapping trong fix_code_pellet_dict (Bảng 2 của Fix code pellet).
+    Fallback về congsuat_dict.die_size nếu không tìm thấy.
+    """
+    p_code = str(product_code).strip().upper().replace(' ', '')
+    
+    # 1. Tra trong _die_mapping (source of truth từ Fix code pellet Bảng 2)
+    die_mapping = fix_code_pellet_dict.get('_die_mapping', {})
+    
+    # Thử khớp chính xác
+    if p_code in die_mapping:
+        ds = die_mapping[p_code].get('die_size', 0)
+        if ds > 0:
+            return ds
+    
+    # Thử khớp gần đúng (loại bỏ hậu tố FS, S, F, ...)
+    for name in sorted(die_mapping.keys(), key=len, reverse=True):
+        name_norm = name.replace(' ', '')
+        if p_code.startswith(name_norm) and len(name_norm) >= 3:
+            ds = die_mapping[name_norm].get('die_size', 0)
+            if ds > 0:
+                return ds
+    
+    # 2. Fallback: tra trong congsuat_dict
+    if p_code in congsuat_dict:
+        spec = congsuat_dict[p_code]
+        if hasattr(spec, 'die_size') and spec.die_size > 0:
+            return spec.die_size
+    
+    # 3. Fallback mặc định = 4.0mm (die phổ biến nhất)
+    return 4.0
+
+
 def get_tph(product_code, line_cv, congsuat_dict, fix_code_pellet_dict):
     """
     Lấy năng suất Tấn/Giờ (T/h) của sản phẩm trên máy cụ thể.
@@ -59,8 +94,8 @@ def get_tph(product_code, line_cv, congsuat_dict, fix_code_pellet_dict):
     # 2. Thử tra trong bảng công suất chung (congsuat_dict)
     if p_code in congsuat_dict:
         spec = congsuat_dict[p_code]
-        # Nếu dòng khớp với mặc định
-        if spec.line_cv == line and spec.tph > 0:
+        # Nếu dòng khớp với mặc định và có tph
+        if spec.line_cv == line and hasattr(spec, 'tph') and spec.tph > 0:
             return spec.tph
             
     # 3. Fallback mặc định theo máy
@@ -71,7 +106,7 @@ def get_tph(product_code, line_cv, congsuat_dict, fix_code_pellet_dict):
     return default_machine_tph.get(line, 15.0)
 
 
-def plan_pellet_shifts(demand_list, tonbon_detail, congsuat_dict, fix_code_pellet_dict, khangsinh_dict, target_date):
+def plan_pellet_shifts(demand_list, tonbon_detail, congsuat_dict, fix_code_pellet_dict, khangsinh_dict, target_date, feedcode_dict=None, code_mapping=None):
     """
     Thuật toán chính lập kế hoạch Pellet chi tiết theo ca và Mixer cám bột.
     """
@@ -79,6 +114,59 @@ def plan_pellet_shifts(demand_list, tonbon_detail, congsuat_dict, fix_code_pelle
     print("🔮 BẮT ĐẦU LẬP KẾ HOẠCH PELLET CHI TIẾT THEO CA")
     print("="*50)
     
+    # Xây dựng bản đồ quy đổi mã SAP thành tên cám dân dã từ FEEDCODE và code_mapping
+    sap_to_colloquial = {}
+    if code_mapping:
+        for raw_code, colloquial_name in code_mapping.items():
+            if raw_code and colloquial_name:
+                sap_to_colloquial[str(raw_code).strip().upper()] = str(colloquial_name).strip().upper()
+    if feedcode_dict:
+        for colloquial_name, info in feedcode_dict.items():
+            raw_code = info.get('feed_code')
+            if raw_code:
+                sap_to_colloquial[str(raw_code).strip().upper()] = str(colloquial_name).strip().upper()
+    # Bổ sung từ congsuat_dict (đảm bảo mọi digit_code→colloquial_name đều có)
+    if congsuat_dict:
+        for key, spec in congsuat_dict.items():
+            if hasattr(spec, 'product_code') and hasattr(spec, 'product_name'):
+                pc = str(spec.product_code).strip().upper()
+                pn = str(spec.product_name).strip().upper()
+                if pc and pn and pc != pn:
+                    sap_to_colloquial[pc] = pn  # congsuat override Code sheet
+
+                
+    def _translate_sap_code(raw_code):
+        if not raw_code:
+            return ''
+        c = str(raw_code).strip().upper().replace(' ', '')
+        
+        # 1. Khớp chính xác
+        if c in sap_to_colloquial:
+            return sap_to_colloquial[c]
+            
+        # 2. Loại bỏ đuôi .0 nếu Excel đọc dạng float
+        if c.endswith('.0'):
+            c_no_dot = c[:-2]
+            if c_no_dot in sap_to_colloquial:
+                return sap_to_colloquial[c_no_dot]
+                
+        # 3. Khớp gần đúng (loại bỏ hậu tố chữ cái hoặc tìm tiền tố tương đương)
+        for sap, colloquial in sap_to_colloquial.items():
+            if c.startswith(sap) or sap.startswith(c):
+                return colloquial
+                
+        # 4. Quy tắc tiền tố hệ thống mặc định của nhà máy (fallback từ demand_calculator)
+        if c.startswith('96') and len(c) >= 4:
+            return '5' + c[2:]
+        if c.startswith('94') and len(c) >= 4:
+            return '3' + c[2:]
+        if c.startswith('9') and len(c) == 3:
+            return '5' + c[1:]
+        if c.startswith('8') and len(c) == 3:
+            return '3' + c[1:]
+            
+        return c
+
     # 1. Tách riêng cám bột (Mash Feed) và cám viên (Pellet)
     pellet_demands = []
     mash_demands = []
@@ -103,7 +191,8 @@ def plan_pellet_shifts(demand_list, tonbon_detail, congsuat_dict, fix_code_pelle
             silo_num = int(silo_num_key)
         except (ValueError, TypeError):
             continue
-        prod = data_item.get('product', data_item.get('product_code', ''))
+        prod_raw = data_item.get('product', data_item.get('product_code', ''))
+        prod = _translate_sap_code(prod_raw)
         tons = data_item['tons']
         if silo_num in (129, 130):
             pl6_7_silos[silo_num] = {'product': prod, 'tons': tons}
@@ -159,8 +248,7 @@ def plan_pellet_shifts(demand_list, tonbon_detail, congsuat_dict, fix_code_pelle
         # Lấy die_size cuối cùng từ tồn đầu
         if ton_daus:
             for td in ton_daus:
-                spec = congsuat_dict.get(td['product_code'], None)
-                current_die = spec.die_size if spec else 4.0
+                current_die = get_die_size(td['product_code'], congsuat_dict, fix_code_pellet_dict)
                 tph = get_tph(td['product_code'], machine, congsuat_dict, fix_code_pellet_dict)
                 total_time += td['tons'] / tph
                 total_time += CHANGEOVER_TIME  # cộng hao hụt chuyển cám
@@ -168,8 +256,7 @@ def plan_pellet_shifts(demand_list, tonbon_detail, congsuat_dict, fix_code_pelle
         # 2. Thời gian chạy các job trong ngày
         is_first = True
         for job in jobs:
-            spec = congsuat_dict.get(job.product_code, None)
-            die_size = spec.die_size if spec else 4.0
+            die_size = get_die_size(job.product_code, congsuat_dict, fix_code_pellet_dict)
             
             # Thời gian khởi động máy pellet đầu ngày
             if is_first and not ton_daus:
@@ -296,22 +383,32 @@ def plan_pellet_shifts(demand_list, tonbon_detail, congsuat_dict, fix_code_pelle
         jobs = machine_jobs[m]
         ton_daus = ton_dau_by_machine[m]
         
-        # Sắp xếp các job trong ngày theo quy tắc:
-        # - Cám Silo ưu tiên lên trước (để chạy Ca 1 / Ca 3)
-        # - Sau đó sắp xếp theo an toàn sinh học kháng sinh tăng dần (sạch trước, thuốc sau)
-        # - tons lớn chạy trước để ổn định máy
+        # Sắp xếp các job trong ngày theo quy tắc tối ưu (từ kinh nghiệm Mixer):
+        # 1. Cám Silo ưu tiên lên trước (xe bồn đang chờ)
+        # 2. GOM CÙNG DIE SIZE chạy liên tiếp (giảm C.DIE - loss lớn nhất)
+        # 3. Trong cùng die → sắp xếp kháng sinh tăng dần (sạch → bẩn)
+        # 4. Trong cùng KS level → tons lớn chạy trước để ổn định máy
         from data_loader import resolve_antibiotic_for_product
         from config import DEFAULT_TON_PER_BATCH
         
-        # Tính toán cấp độ kháng sinh cho mỗi job
+        # Tính toán cấp độ kháng sinh và die_size cho mỗi job
         for j in jobs:
             ks_code, ks_level = resolve_antibiotic_for_product(j.product_code, khangsinh_dict)
             j.ks_level = ks_level
+            j._die_size = get_die_size(j.product_code, congsuat_dict, fix_code_pellet_dict)
+        
+        # Xác định die_size của tồn đầu để ưu tiên chạy cùng die trước
+        carryover_die = None
+        if ton_daus:
+            carryover_die = get_die_size(ton_daus[0]['product_code'], congsuat_dict, fix_code_pellet_dict)
             
         jobs.sort(key=lambda x: (
             0 if (x.packing_size == 'SILO' or x.silo_truck) else 1,
-            x.ks_level,
-            -x.tons
+            # Ưu tiên sản phẩm cùng die với tồn đầu (không cần thay khuôn)
+            0 if (carryover_die and x._die_size == carryover_die) else 1,
+            x._die_size,       # Gom cùng die size liên tiếp
+            x.ks_level,        # Trong cùng die → sạch trước bẩn sau
+            -x.tons            # Volume lớn trước
         ))
         
         # Tạo chuỗi chạy hoàn chỉnh bắt đầu bằng Tồn Đầu
@@ -320,8 +417,7 @@ def plan_pellet_shifts(demand_list, tonbon_detail, congsuat_dict, fix_code_pelle
         # Thêm Tồn Đầu vào đầu ngày
         if ton_daus:
             for td in ton_daus:
-                spec = congsuat_dict.get(td['product_code'], None)
-                die_size = spec.die_size if spec else 4.0
+                die_size = get_die_size(td['product_code'], congsuat_dict, fix_code_pellet_dict)
                 all_runs.append({
                     'product_code': td['product_code'],
                     'tons': td['tons'],
@@ -332,8 +428,7 @@ def plan_pellet_shifts(demand_list, tonbon_detail, congsuat_dict, fix_code_pelle
                 
         # Thêm các job trong ngày
         for j in jobs:
-            spec = congsuat_dict.get(j.product_code, None)
-            die_size = spec.die_size if spec else 4.0
+            die_size = get_die_size(j.product_code, congsuat_dict, fix_code_pellet_dict)
             all_runs.append({
                 'product_code': j.product_code,
                 'tons': j.tons,

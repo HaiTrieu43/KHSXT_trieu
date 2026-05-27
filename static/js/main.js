@@ -531,7 +531,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (category === 'empty_bag') {
             headHTML += `<th>Mã Cám</th><th>HIGRO (Cái)</th><th>C.P. (Cái)</th><th>STAR (Cái)</th><th>NASA (Cái)</th><th>NUVO (Cái)</th><th>FARM (Cái)</th>`;
         } else if (category === 'congsuat') {
-            headHTML += `<th>Mã Cám</th><th>Mã Công Thức</th><th>Kích Khuôn</th><th>Tấn/Mẻ Trộn</th><th>Mixer Line</th><th>Line Đóng Bao</th><th>Kháng Sinh</th>`;
+            headHTML += `<th>Mã Cám</th><th>Tên Cám</th><th>Mã Công Thức</th><th>Kích Khuôn</th><th>Tấn/Mẻ Trộn</th><th>Mixer Line</th><th>Line Đóng Bao</th><th>Kháng Sinh</th>`;
         } else if (category === 'feedcode') {
             headHTML += `<th>Mã Cám</th><th>Line Trộn (Mixer)</th><th>Line Đóng Bao</th>`;
         } else if (category === 'khangsinh') {
@@ -606,6 +606,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (category === 'congsuat') {
                 bodyHTML += `
                     <td><strong>${row.product_code}</strong></td>
+                    <td class="text-cyan"><strong>${row.product_name || ''}</strong></td>
                     <td>${row.formular_code || ''}</td>
                     <td>${row.die_size || ''}</td>
                     <td><strong>${row.ton_per_batch}</strong></td>

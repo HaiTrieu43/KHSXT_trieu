@@ -1172,17 +1172,7 @@ def load_empty_bag(file_path: str) -> dict:
 
 def load_congsuat(file_path: str) -> dict:
     """
-    Đọc Công Suất từ Plan.xlsm → dict {product → ProductSpec}
-
-    Tìm sheet chứa 'CONG' và 'SUAT' (hoặc gần đúng).
-    Tìm ton_per_batch (giá trị giữa 5.0 và 10.0).
-    Default ton_per_batch = 8.4.
-
-    Args:
-        file_path: Đường dẫn file Plan.xlsm
-
-    Returns:
-        dict {'552SF': ProductSpec(...), '550S': ProductSpec(...), ...}
+    Đọc Công Suất từ Plan.xlsm → dict {product_code/colloquial_name → ProductSpec}
     """
     print(f"⚙️ Đọc CÔNG SUẤT: {os.path.basename(file_path)}")
     result = {}
@@ -1191,12 +1181,10 @@ def load_congsuat(file_path: str) -> dict:
     if wb is None:
         return result
 
-    # Tìm sheet chứa 'CONG' và 'SUAT' (hoặc 'CÔNG' và 'SUẤT')
     target_ws = None
     target_name = None
     for name in wb.sheetnames:
         name_upper = name.upper()
-        # Tìm sheet có chứa cả hai từ (có dấu hoặc không)
         has_cong = 'CONG' in name_upper or 'CÔNG' in name_upper
         has_suat = 'SUAT' in name_upper or 'SUẤT' in name_upper or 'XUẤT' in name_upper
         if has_cong and has_suat:
@@ -1204,7 +1192,6 @@ def load_congsuat(file_path: str) -> dict:
             target_name = name
             break
 
-    # Nếu không tìm thấy, thử tìm sheet có 'PLAN' hoặc 'CS'
     if target_ws is None:
         for name in wb.sheetnames:
             name_upper = name.upper()
@@ -1220,34 +1207,66 @@ def load_congsuat(file_path: str) -> dict:
 
     print(f"  📋 Sheet: {target_name}")
 
-    for row in target_ws.iter_rows(min_row=2, max_row=400, max_col=10):
-        val_str = _safe_str(row[0].value)  # Cột A = mã sản phẩm
-        if not val_str:
+    for row in target_ws.iter_rows(min_row=3, max_row=400, max_col=15):
+        if len(row) < 9:
+            continue
+            
+        code_val = row[1].value # Cột B = CODE (digit code)
+        name_val = row[2].value # Cột C = FEED NO. (colloquial name)
+        
+        if not code_val and not name_val:
+            continue
+            
+        # Tiêu đề hoặc tổng
+        val_str = _safe_str(code_val or name_val)
+        if any(kw in val_str.upper() for kw in {'TOTAL', 'STT', 'TÊN', 'MÃ', 'SẢN PHẨM', 'PRODUCT'}):
             continue
 
-        if any(kw in val_str for kw in {'TOTAL', 'STT', 'TÊN', 'MÃ',
-                                         'SẢN PHẨM', 'PRODUCT'}):
+        # Chuẩn hóa
+        product_code = _normalize_product_code(code_val)
+        product_name = _normalize_product_code(name_val)
+        
+        if not product_code:
+            product_code = product_name
+        if not product_name:
+            product_name = product_code
+            
+        if not product_code:
             continue
 
-        product = _normalize_product_code(row[0].value)
-
-        # Tìm ton_per_batch trong các cột sau
-        ton_per_batch = 8.4  # Mặc định
-        for col_idx in range(1, min(len(row), 10)):
-            val = _safe_float(row[col_idx].value)
-            if 5.0 <= val <= 10.0:
-                ton_per_batch = val
-                break
+        # Tìm ton_per_batch từ Cột E (index 4)
+        ton_per_batch = _safe_float(row[4].value)
+        if not ton_per_batch or not (4.0 <= ton_per_batch <= 15.0):
+            ton_per_batch = 8.4  # Mặc định
+            
+        # Tìm line_cv từ Cột H (index 7)
+        line_cv = _safe_str(row[7].value)
+        if line_cv == 'M':
+            line_cv = 'MASH'
+            
+        # Tìm formular_code từ Cột I (index 8)
+        formular_code = _safe_str(row[8].value)
 
         spec = ProductSpec(
-            product_code=product,
+            product_code=product_code,
+            product_name=product_name,
+            formular_code=formular_code,
             ton_per_batch=ton_per_batch,
+            line_cv=line_cv,
+            die_size=0.0,
+            line_pk='',
+            ks_code=''
         )
-        result[product] = spec
+        
+        # Đăng ký spec dưới cả 2 key để tương thích tối đa
+        result[product_code] = spec
+        if product_name and product_name != product_code:
+            result[product_name] = spec
 
     wb.close()
     print(f"  ✅ Đọc CÔNG SUẤT: {len(result)} sản phẩm")
     return result
+
 
 
 # ============================================================
@@ -1300,6 +1319,7 @@ def load_feedcode(file_path: str) -> dict:
         if any(kw in val_str for kw in {'TÊN', 'MÃ', 'STT', 'FEED', 'PRODUCT', 'CODE', 'CÁM'}):
             continue
 
+        feed_code = _safe_str(row[0].value).strip().upper()
         product = _normalize_product_code(row[1].value)
 
         line_cv = _safe_str(row[2].value) if len(row) > 2 else ''  # C = MÁY ÉP VIÊN
@@ -1308,6 +1328,7 @@ def load_feedcode(file_path: str) -> dict:
         result[product] = {
             'line_cv': line_cv,
             'line_pk': line_pk,
+            'feed_code': feed_code,
         }
 
     wb.close()
@@ -1526,7 +1547,13 @@ def load_stt_khangsinh(file_path: str) -> dict:
 def load_fix_code_pellet(file_path: str) -> dict:
     """
     Đọc ma trận ưu tiên gán máy Pellet từ sheet 'Fix code pellet' của Plan.xlsm.
-    Trả về dict {product_full_code: {'default_line': str, 'priorities': list[str], 'note': str}}
+    
+    Sheet có 2 bảng song song:
+      - Bảng 1 (Col C-D): Mã đầy đủ → Line CV mặc định (routing)
+      - Bảng 2 (Col W, X, Y, Z-AD): Tên cám → Packing, DIE size, Ưu tiên máy
+    
+    Trả về dict {product_full_code: {'default_line': str, 'priorities': list[str], 'die_size': float, 'note': str}}
+    Cộng thêm key '_die_mapping' chứa {product_name_upper: {'die_size': float, 'priorities': list[str]}}
     """
     print(f"⚙️ Đọc MA TRẬN Pellet: {os.path.basename(file_path)}")
     result = {}
@@ -1539,20 +1566,77 @@ def load_fix_code_pellet(file_path: str) -> dict:
     ws = None
     for name in wb.sheetnames:
         name_upper = name.upper()
-        if 'FIX CODE' in name_upper or 'PELLET' in name_upper:
+        if 'FIX CODE' in name_upper and 'PELLET' in name_upper:
             ws = wb[name]
             break
+    # Fallback: tìm sheet có chứa "FIX CODE" hoặc bắt đầu bằng "Fix"
+    if ws is None:
+        for name in wb.sheetnames:
+            name_upper = name.upper()
+            if 'FIX CODE' in name_upper:
+                ws = wb[name]
+                break
             
     if ws is None:
         print("  ⚠️ Không tìm thấy sheet 'Fix code pellet'")
         wb.close()
         return result
-        
+    
+    # ----------------------------------------------------------------
+    # BẢNG 2: Đọc DIE mapping từ Col W (NAME), Y (DIE), Z-AD (Ưu tiên)
+    # Đây là bảng chính xác về die_size và ưu tiên máy cho mỗi sản phẩm
+    # ----------------------------------------------------------------
+    die_mapping = {}  # {product_name_upper: {'die_size': float, 'priorities': list[str]}}
+    
     for row in ws.iter_rows(min_row=3, max_row=300, max_col=32):
         if len(row) < 31:
             continue
             
-        code_val = row[1].value # Cột B = Mã đầy đủ
+        # Col W (index 22) = NAME (tên cám thông dụng: 552S, 511B, v.v.)
+        name_val = row[22].value
+        if name_val is None:
+            continue
+        name = str(name_val).strip().upper()
+        if not name:
+            continue
+            
+        # Col Y (index 24) = DIE size
+        die_raw = row[24].value
+        die_size = 0.0
+        if die_raw is not None:
+            try:
+                die_size = float(die_raw)
+            except (ValueError, TypeError):
+                die_size = 0.0  # SC, MC, M → không parse được → dùng default
+        
+        # Col Z-AD (index 25-29) = 5 mức ưu tiên máy
+        priorities = []
+        for col_idx in range(25, 30):
+            val = row[col_idx].value
+            if val is not None:
+                p_line = str(val).strip().upper()
+                if p_line and p_line != 'NONE' and p_line != 'NULL':
+                    if p_line.isdigit():
+                        p_line = f"PL{p_line}"
+                    priorities.append(p_line)
+        
+        # Lưu vào die_mapping (ưu tiên entry có die_size > 0)
+        if name not in die_mapping or die_size > 0:
+            die_mapping[name] = {
+                'die_size': die_size,
+                'priorities': priorities
+            }
+    
+    print(f"  📐 Đọc được {len(die_mapping)} sản phẩm có die_size từ Bảng 2 (Col W-AD)")
+    
+    # ----------------------------------------------------------------
+    # BẢNG 1: Đọc routing mã đầy đủ → Line CV mặc định (Col C-D)
+    # ----------------------------------------------------------------
+    for row in ws.iter_rows(min_row=3, max_row=300, max_col=32):
+        if len(row) < 4:
+            continue
+            
+        code_val = row[2].value  # Cột C = Mã đầy đủ (ví dụ '550PRO252.5')
         if code_val is None:
             continue
             
@@ -1560,31 +1644,45 @@ def load_fix_code_pellet(file_path: str) -> dict:
         if not code:
             continue
             
-        default_line = _safe_str(row[3].value) # Cột D = Line_CV mặc định
+        default_line = _safe_str(row[3].value)  # Cột D = Line_CV mặc định
+        if default_line.isdigit():
+            default_line = f"PL{default_line}"
         
-        # Đọc 5 mức ưu tiên từ cột Z đến AD (index 25 đến 29)
-        priorities = []
-        for col_idx in range(25, 30):
-            val = row[col_idx].value
-            if val is not None:
-                p_line = str(val).strip().upper()
-                if p_line and p_line != 'NONE' and p_line != 'NULL':
-                    # Chuẩn hóa tên máy, ví dụ '4' -> 'PL4', 'PL4' -> 'PL4'
-                    if p_line.isdigit():
-                        p_line = f"PL{p_line}"
-                    priorities.append(p_line)
-                    
-        note = _safe_str(row[30].value) # Cột AE = Ghi chú
+        # Lookup die_size từ die_mapping (Bảng 2) theo tên cám
+        # Tên cám = phần đầu của mã, loại bỏ packing (25/40/50/SILO) và die ở cuối
+        die_size = 0.0
+        matched_priorities = []
+        code_upper = code.upper().replace(' ', '')
         
+        # Thử tìm die_size từ die_mapping bằng cách match product name
+        for prod_name in sorted(die_mapping.keys(), key=len, reverse=True):
+            prod_norm = prod_name.replace(' ', '')
+            if code_upper.startswith(prod_norm) and len(prod_norm) >= 3:
+                entry = die_mapping[prod_name]  # Use original key with spaces
+                if entry['die_size'] > 0:
+                    die_size = entry['die_size']
+                    matched_priorities = entry['priorities']
+                    break
+        
+        note = ''
+        if len(row) >= 31:
+            note = _safe_str(row[30].value)  # Cột AE = Ghi chú
+        
+        # Ưu tiên priorities từ Bảng 2 nếu có, nếu không thì để rỗng
         result[code] = {
             'default_line': default_line,
-            'priorities': priorities,
+            'priorities': matched_priorities,
+            'die_size': die_size,
             'note': note
         }
+    
+    # Lưu die_mapping vào key đặc biệt '_die_mapping' để pellet_planner dùng
+    result['_die_mapping'] = die_mapping
         
     wb.close()
-    print(f"  ✅ Đọc được {len(result)} cấu hình gán máy Pellet từ ma trận")
+    print(f"  ✅ Đọc được {len(result) - 1} cấu hình gán máy Pellet từ ma trận")
     return result
+
 
 
 # ============================================================
@@ -2091,9 +2189,183 @@ def download_sharepoint_files_if_configured(config):
         download_sharepoint_file(plan_url, config.PLAN_FILE)
 
 
+def load_code_mapping(file_path: str) -> dict:
+    """
+    Đọc bảng tra cứu mã từ sheet Code hoặc Fix code pellet của Plan.xlsm.
+    Trả về dict {digit_code: colloquial_name}
+    """
+    print(f"📖 Đọc từ điển mã cám 'Code' từ: {os.path.basename(file_path)}")
+    mapping = {}
+    wb = _open_workbook(file_path)
+    if wb is None:
+        return mapping
+        
+    # Thử đọc sheet 'Code' trước
+    if 'Code' in wb.sheetnames:
+        ws = wb['Code']
+        for row in ws.iter_rows(min_row=3, values_only=True):
+            if len(row) >= 2:
+                # Column A = Feed Name (colloquial), Column B = Digit Code
+                name = _safe_str(row[0])
+                code = _safe_str(row[1])
+                if name and code:
+                    code_norm = _normalize_product_code(code)
+                    name_norm = _normalize_product_code(name)
+                    if code_norm and name_norm:
+                        mapping[code_norm] = name_norm
+                        
+    # Bổ sung từ sheet 'Fix code pellet' nếu có
+    if 'Fix code pellet' in wb.sheetnames:
+        ws = wb['Fix code pellet']
+        for row in ws.iter_rows(min_row=3, values_only=True):
+            if len(row) >= 23:
+                # Cột U (index 20) = CODE, Cột W (index 22) = NAME (colloquial name)
+                code = _safe_str(row[20])
+                name = _safe_str(row[22])
+                if code and name:
+                    code_norm = _normalize_product_code(code)
+                    name_norm = _normalize_product_code(name)
+                    if code_norm and name_norm and code_norm not in mapping:
+                        mapping[code_norm] = name_norm
+                        
+    wb.close()
+    
+    # Bổ sung các mã SAP mồ côi (có trong tồn bồn nhưng thiếu trong cả Code & CONG SUAT)
+    orphan_sap_codes = {
+        '112801': 'GT11S',       # Xác minh từ mẫu SAP: 1126xx = GT11x
+        '3210BBD0': '552XBBD',   # Mã đặc biệt tồn bồn nhà máy
+    }
+    for k, v in orphan_sap_codes.items():
+        if k not in mapping:
+            mapping[k] = v
+    
+    print(f"  ✅ Đã đọc {len(mapping)} liên kết đối chiếu mã cám")
+    return mapping
+
+
+def enrich_congsuat(data: dict):
+    """
+    Bổ khuyết các trường còn thiếu (die_size, line_pk, ks_code) cho congsuat
+    """
+    congsuat = data.get('congsuat', {})
+    feedcode = data.get('feedcode', {})
+    khangsinh = data.get('khangsinh', {})
+    fix_code_pellet = data.get('fix_code_pellet', {})
+    
+    for p, spec in list(congsuat.items()):
+        # 1. Bổ khuyết line_pk từ feedcode
+        fc_info = feedcode.get(spec.product_name) or feedcode.get(spec.product_code)
+        if fc_info:
+            if not spec.line_pk:
+                spec.line_pk = fc_info.get('line_pk', '')
+            if not spec.line_cv:
+                spec.line_cv = fc_info.get('line_cv', '')
+                
+        # 2. Bổ khuyết ks_code từ khangsinh
+        ks_info = khangsinh.get(spec.product_name) or khangsinh.get(spec.product_code)
+        if ks_info:
+            if isinstance(ks_info, dict):
+                spec.ks_code = ks_info.get('ks_code', '')
+            else:
+                spec.ks_code = str(ks_info)
+                
+        # 3. Bổ khuyết die_size từ fix_code_pellet hoặc tên sản phẩm
+        # Xem có khớp trong fix_code_pellet không
+        fcp_info = fix_code_pellet.get(spec.product_name) or fix_code_pellet.get(spec.product_code)
+        if fcp_info and fcp_info.get('die_size'):
+            spec.die_size = fcp_info['die_size']
+        else:
+            # Quy tắc suy luận die_size thông minh theo tên cám
+            die_val = 0.0
+            p_name = spec.product_name.upper()
+            if '2.5' in p_name:
+                die_val = 2.5
+            elif '2.8' in p_name:
+                die_val = 2.8
+            elif '3.2' in p_name:
+                die_val = 3.2
+            elif '4.0' in p_name:
+                die_val = 4.0
+            else:
+                if p_name.startswith('550') or p_name.startswith('551'):
+                    die_val = 2.8 if 'PRO' in p_name or 'GP' in p_name else 2.5
+                elif p_name.startswith('552'):
+                    die_val = 2.8
+                elif p_name.startswith('553'):
+                    die_val = 3.2
+                elif p_name.startswith('567'):
+                    die_val = 4.0
+                elif p_name.startswith('GT11'):
+                    die_val = 2.8
+                else:
+                    die_val = 4.0
+            spec.die_size = die_val
+
+    # 4. Tự động bổ sung các spec mặc định cho các mã trong code_mapping mà chưa có trong congsuat
+    code_mapping = data.get('code_mapping', {})
+    for code_norm, name_norm in code_mapping.items():
+        if code_norm not in congsuat and name_norm not in congsuat:
+            p_name = name_norm.upper()
+            die_val = 0.0
+            if '2.5' in p_name:
+                die_val = 2.5
+            elif '2.8' in p_name:
+                die_val = 2.8
+            elif '3.2' in p_name:
+                die_val = 3.2
+            elif '4.0' in p_name:
+                die_val = 4.0
+            else:
+                if p_name.startswith('550') or p_name.startswith('551'):
+                    die_val = 2.8 if 'PRO' in p_name or 'GP' in p_name else 2.5
+                elif p_name.startswith('552'):
+                    die_val = 2.8
+                elif p_name.startswith('553'):
+                    die_val = 3.2
+                elif p_name.startswith('567'):
+                    die_val = 4.0
+                elif p_name.startswith('GT11'):
+                    die_val = 2.8
+                else:
+                    die_val = 4.0
+                    
+            line_cv = 'MASH' if 'MASH' in p_name or p_name.endswith('M') else 'PL1'
+            if p_name.startswith('550') or p_name.startswith('551'):
+                line_cv = 'PL1'
+            elif p_name.startswith('552'):
+                line_cv = 'PL2'
+            elif p_name.startswith('553'):
+                line_cv = 'PL3'
+            elif p_name.startswith('554') or p_name.startswith('566'):
+                line_cv = 'PL4'
+            elif p_name.startswith('GT11'):
+                line_cv = 'PL5'
+            elif p_name.startswith('562'):
+                line_cv = 'PL3'
+            elif p_name.startswith('567'):
+                line_cv = 'PL3'
+                
+            spec = ProductSpec(
+                product_code=code_norm,
+                product_name=name_norm,
+                formular_code=code_norm,
+                ton_per_batch=8.0 if (die_val <= 2.8 and (p_name.startswith('550') or p_name.startswith('551'))) else 8.4,
+                line_cv=line_cv,
+                die_size=die_val,
+                line_pk='SILO' if 'SILO' in p_name else '25',
+                ks_code=''
+            )
+            
+            # Đăng ký spec dưới cả 2 key
+            congsuat[code_norm] = spec
+            congsuat[name_norm] = spec
+
+
+
 # ============================================================
 # 12. LOAD ALL DATA
 # ============================================================
+
 
 def load_all_data(config, target_date=None) -> dict:
     if getattr(config, 'USE_POSTGRESQL', False):
@@ -2222,11 +2494,13 @@ def load_all_data(config, target_date=None) -> dict:
         data['congsuat'] = load_congsuat(plan_file)
         data['stt_khangsinh'] = load_stt_khangsinh(plan_file)
         data['fix_code_pellet'] = load_fix_code_pellet(plan_file)
+        data['code_mapping'] = load_code_mapping(plan_file)
     else:
         data['congsuat'] = {}
         data['stt_khangsinh'] = {}
         data['fix_code_pellet'] = {}
-        print("  ⚠️  Bỏ qua CÔNG SUẤT, STT KHÁNG SINH, FIX CODE PELLET")
+        data['code_mapping'] = {}
+        print("  ⚠️  Bỏ qua CÔNG SUẤT, STT KHÁNG SINH, FIX CODE PELLET, CODE MAPPING")
 
     # ─── 8. FEEDCODE ─────────────────────────────────────────
     print("\n" + "─" * 40)
@@ -2284,7 +2558,18 @@ def load_all_data(config, target_date=None) -> dict:
     print(f"  💊 Kháng sinh SP: {len(data['khangsinh'])} mã")
     print(f"  📋 KHSX hôm qua: {len(data['khsx_yesterday'])} sản phẩm")
     print("=" * 60)
-
+    # Bổ khuyết (enrich) chéo dữ liệu cấu hình congsuat
+    enrich_congsuat(data)
+    
+    # Bổ sung code_mapping từ congsuat — congsuat có ưu tiên cao hơn sheet Code
+    # vì nó lấy trực tiếp từ cột B→C của sheet CONG SUAT (nguồn chính xác nhất)
+    code_mapping = data.get('code_mapping', {})
+    congsuat = data.get('congsuat', {})
+    for key, spec in congsuat.items():
+        if spec.product_code and spec.product_name and spec.product_code != spec.product_name:
+            code_mapping[spec.product_code] = spec.product_name  # Override Code sheet nếu khác
+    data['code_mapping'] = code_mapping
+    
     return data
 
 

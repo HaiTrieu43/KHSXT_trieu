@@ -26,7 +26,7 @@ import data_loader
 from models import Priority, PackingType
 
 app = Flask(__name__, template_folder=os.path.join(CURRENT_DIR, 'templates'), static_folder=os.path.join(CURRENT_DIR, 'static'))
-app.config['SECRET_KEY'] = 'cp_vietnam_khsx_secret_key'
+app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'cp_vietnam_khsx_secret_key')
 
 # Khởi tạo thư mục upload tạm thời
 TEMP_UPLOAD_DIR = os.path.join(CURRENT_DIR, 'temp_uploads')
@@ -136,6 +136,8 @@ def healthz():
             status["database"] = "error"
             status["error"] = str(e)
             return jsonify(status), 500
+    
+    return jsonify(status), 200
             
 @app.route('/favicon.ico')
 def favicon():
@@ -439,16 +441,21 @@ def get_detailed_data(category):
                     })
             elif category == 'congsuat':
                 congsuat = db_data['congsuat']
+                seen_codes = set()
                 for p, spec in sorted(congsuat.items()):
-                    rows.append({
-                        'product_code': spec.product_code,
-                        'formular_code': spec.formular_code,
-                        'die_size': spec.die_size,
-                        'ton_per_batch': spec.ton_per_batch,
-                        'line_cv': spec.line_cv,
-                        'line_pk': spec.line_pk,
-                        'ks_code': spec.ks_code
-                    })
+                    if spec.product_code not in seen_codes:
+                        seen_codes.add(spec.product_code)
+                        rows.append({
+                            'product_code': spec.product_code,
+                            'product_name': spec.product_name,
+                            'formular_code': spec.formular_code,
+                            'die_size': spec.die_size,
+                            'ton_per_batch': spec.ton_per_batch,
+                            'line_cv': spec.line_cv,
+                            'line_pk': spec.line_pk,
+                            'ks_code': spec.ks_code
+                        })
+
             elif category == 'feedcode':
                 feedcode = db_data['feedcode']
                 for p, lines in sorted(feedcode.items()):
@@ -702,17 +709,29 @@ def get_detailed_data(category):
             info = get_file_info(None, None, exact_path=config.PLAN_FILE)
             if info['exists']:
                 congsuat = data_loader.load_congsuat(info['path'])
-                # congsuat: dict {product → ProductSpec}
+                db_data = {'congsuat': congsuat}
+                khsx_info = get_file_info(None, None, exact_path=config.KHSX_FILE)
+                if khsx_info['exists']:
+                    db_data['feedcode'] = data_loader.load_feedcode(khsx_info['path'])
+                    db_data['khangsinh'] = data_loader.load_khangsinh(khsx_info['path'])
+                db_data['fix_code_pellet'] = data_loader.load_fix_code_pellet(info['path'])
+                data_loader.enrich_congsuat(db_data)
+                
+                seen_codes = set()
                 for p, spec in sorted(congsuat.items()):
-                    rows.append({
-                        'product_code': spec.product_code,
-                        'formular_code': spec.formular_code,
-                        'die_size': spec.die_size,
-                        'ton_per_batch': spec.ton_per_batch,
-                        'line_cv': spec.line_cv,
-                        'line_pk': spec.line_pk,
-                        'ks_code': spec.ks_code
-                    })
+                    if spec.product_code not in seen_codes:
+                        seen_codes.add(spec.product_code)
+                        rows.append({
+                            'product_code': spec.product_code,
+                            'product_name': spec.product_name,
+                            'formular_code': spec.formular_code,
+                            'die_size': spec.die_size,
+                            'ton_per_batch': spec.ton_per_batch,
+                            'line_cv': spec.line_cv,
+                            'line_pk': spec.line_pk,
+                            'ks_code': spec.ks_code
+                        })
+
                     
         elif category == 'feedcode':
             info = get_file_info(None, None, exact_path=config.KHSX_FILE)
@@ -1267,6 +1286,42 @@ def get_plan_details(date_str):
                 khpl_raw_grid = res_db['khpl_raw_grid']
                 filename = res_db['filename']
                 
+                # Dịch digit code → tên cám dân dã cho khpl_raw_grid từ DB
+                db_code_mapping = {}
+                try:
+                    conn_cm = db_manager.get_connection()
+                    cur_cm = conn_cm.cursor()
+                    cur_cm.execute("SELECT digit_code, colloquial_name FROM code_mapping;")
+                    for dc, cn in cur_cm.fetchall():
+                        if dc and cn:
+                            db_code_mapping[str(dc).strip().upper()] = str(cn).strip().upper()
+                    # Bổ sung từ congsuat
+                    cur_cm.execute("SELECT product_code, product_name FROM congsuat;")
+                    for pc, pn in cur_cm.fetchall():
+                        pc_n = str(pc).strip().upper() if pc else ''
+                        pn_n = str(pn).strip().upper() if pn else ''
+                        if pc_n and pn_n and pc_n != pn_n and pc_n not in db_code_mapping:
+                            db_code_mapping[pc_n] = pn_n
+                    cur_cm.close()
+                    conn_cm.close()
+                except Exception:
+                    pass
+                
+                if db_code_mapping and khpl_raw_grid:
+                    product_cols = [1, 5, 9, 13, 17, 21, 25, 29, 31]  # 0-indexed
+                    for row_idx in range(2, min(len(khpl_raw_grid), 22)):
+                        for col_idx in product_cols:
+                            if col_idx < len(khpl_raw_grid[row_idx]):
+                                cell_val = khpl_raw_grid[row_idx][col_idx]
+                                if cell_val and cell_val != '':
+                                    raw_str = str(cell_val).strip()
+                                    if raw_str.endswith('.0'):
+                                        raw_str = raw_str[:-2]
+                                    norm = raw_str.upper().replace(' ', '')
+                                    translated = db_code_mapping.get(norm, None)
+                                    if translated and translated != norm:
+                                        khpl_raw_grid[row_idx][col_idx] = translated
+                
                 # Tái tạo pl_plans từ sequence
                 pl_plans = {f'PL{i}': [] for i in range(1, 8)}
                 pl_plans['MASH'] = []
@@ -1645,6 +1700,20 @@ def get_plan_details(date_str):
                 }
                 
                 # Tồn Đầu (rows 3 and 4)
+                code_mapping = {}
+                if os.path.exists(config.PLAN_FILE):
+                    try:
+                        code_mapping = data_loader.load_code_mapping(config.PLAN_FILE)
+                        # Bổ sung từ CONG SUAT — override Code sheet vì congsuat là nguồn chính xác nhất
+                        congsuat_data = data_loader.load_congsuat(config.PLAN_FILE)
+                        for _k, spec in congsuat_data.items():
+                            pc = str(spec.product_code).strip().upper()
+                            pn = str(spec.product_name).strip().upper()
+                            if pc and pn and pc != pn:
+                                code_mapping[pc] = pn
+                    except Exception as e:
+                        print(f"⚠️ Lỗi load code_mapping: {e}")
+                        
                 ton_dau = {f"PL{i}": [] for i in range(1, 8)}
                 for r in (3, 4):
                     for m, col in machine_cols.items():
@@ -1652,7 +1721,12 @@ def get_plan_details(date_str):
                         tons = pl_sheet.cell(row=r, column=col+2).value
                         hours = pl_sheet.cell(row=r, column=col+3).value
                         if code:
-                            prod_code = str(code).strip().upper()
+                            raw_str = str(code).strip().upper()
+                            if raw_str.endswith('.0'):
+                                raw_str = raw_str[:-2]
+                            norm_code = data_loader._normalize_product_code(raw_str)
+                            prod_code = code_mapping.get(norm_code, norm_code)
+                            
                             ks_code = ks_mapping.get(prod_code, 'SẠCH (KHÔNG KS)')
                             ton_dau[m].append({
                                 'product_code': prod_code,
@@ -1660,6 +1734,7 @@ def get_plan_details(date_str):
                                 'hours': _safe_float_num(hours),
                                 'ks_code': ks_code
                             })
+
                             
                 # Ca 1 (rows 5 to 8)
                 ca1 = {f"PL{i}": [] for i in range(1, 8)}
@@ -1790,6 +1865,23 @@ def get_plan_details(date_str):
                         cell_val = pl_sheet.cell(row=r, column=c).value
                         row_cells.append(cell_val if cell_val is not None else '')
                     khpl_raw_grid.append(row_cells)
+                
+                # Dịch digit code → tên cám dân dã trong các ô sản phẩm
+                # Cột chứa mã cám: 2(PL1), 6(PL2), 10(PL3), 14(PL4), 18(PL5), 22(PL6), 26(PL7), 30(MASH), 32(MASH cột phụ)
+                product_cols = [1, 5, 9, 13, 17, 21, 25, 29, 31]  # 0-indexed
+                for row_idx in range(2, min(len(khpl_raw_grid), 22)):  # Row 3 đến 22 (0-indexed: 2..21)
+                    for col_idx in product_cols:
+                        if col_idx < len(khpl_raw_grid[row_idx]):
+                            cell_val = khpl_raw_grid[row_idx][col_idx]
+                            if cell_val and cell_val != '':
+                                raw_str = str(cell_val).strip()
+                                # Loại bỏ đuôi .0 nếu Excel đọc float
+                                if raw_str.endswith('.0'):
+                                    raw_str = raw_str[:-2]
+                                norm = raw_str.upper().replace(' ', '')
+                                translated = code_mapping.get(norm, None)
+                                if translated and translated != norm:
+                                    khpl_raw_grid[row_idx][col_idx] = translated
             except Exception as pl_ex:
                 print(f"⚠️ Lỗi khi parse KẾ HOẠCH PL sheet: {pl_ex}")
                 traceback.print_exc()

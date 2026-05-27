@@ -368,8 +368,11 @@ def main():
         congsuat_dict=data.get('congsuat', {}),
         fix_code_pellet_dict=data.get('fix_code_pellet', {}),
         khangsinh_dict=data.get('khangsinh', {}),
-        target_date=today
+        target_date=today,
+        feedcode_dict=data.get('feedcode', {}),
+        code_mapping=data.get('code_mapping', {})
     )
+
 
     # ============================================
     # BƯỚC 8: TẠO KẾ QUẢ

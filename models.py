@@ -29,12 +29,14 @@ class PackingType(Enum):
 class ProductSpec:
     """Thông số kỹ thuật sản phẩm (từ CONG SUAT + FEEDCODE)"""
     product_code: str           # Mã cám (VD: 552SF, 566F)
+    product_name: str = ''      # Tên cám/Mô tả
     formular_code: str = ''     # Mã công thức
     die_size: float = 0.0       # Kích cỡ khuôn (2.5, 2.8, 4.0)
     ton_per_batch: float = 8.4  # Tấn/mẻ
     line_cv: str = ''           # LINE cám viên (PL1-PL7, M)
     line_pk: str = ''           # LINE đóng bao (1-8, SILO)
     ks_code: str = ''           # Mã kháng sinh
+
 
 
 @dataclass

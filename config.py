@@ -2,11 +2,22 @@
 config.py - Cấu hình đường dẫn file và hằng số
 """
 import os
+import sys
+
+# ============================================
+# PHÁT HIỆN MÔI TRƯỜNG CLOUD VS LOCAL
+# ============================================
+IS_CLOUD = os.environ.get('RENDER', '') == 'true' or sys.platform != 'win32'
 
 # ============================================
 # THƯ MỤC GỐC
 # ============================================
-DATA_DIR = r'D:\Kê hoạch sản xuât'
+if IS_CLOUD:
+    # Trên Render/Cloud: dùng thư mục tạm, không có file Excel
+    DATA_DIR = '/tmp/khsx_data'
+    os.makedirs(DATA_DIR, exist_ok=True)
+else:
+    DATA_DIR = r'D:\Kê hoạch sản xuât'
 
 # ============================================
 # ĐƯỜNG DẪN FILE INPUT
@@ -45,7 +56,10 @@ WORKING_DAYS_PER_WEEK = 6
 # ============================================
 # THƯ MỤC OUTPUT
 # ============================================
-OUTPUT_DIR = os.path.join(DATA_DIR, 'laptrinh vao', 'output')
+if IS_CLOUD:
+    OUTPUT_DIR = '/tmp/khsx_output'
+else:
+    OUTPUT_DIR = os.path.join(DATA_DIR, 'laptrinh vao', 'output')
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # ============================================
@@ -63,145 +77,154 @@ ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', '123456')
 # ============================================
 # CẤU HÌNH ONEDRIVE ĐỒNG BỘ CỤC BỘ
 # ============================================
-# Khi nhấn "Add shortcut to OneDrive" trên SharePoint, OneDrive tạo thư mục
-# với tên rút gọn (không giữ nguyên cấu trúc SharePoint gốc).
-# Đường dẫn thực tế đã xác minh ngày 26/05/2026.
+if IS_CLOUD:
+    # Trên Render/Cloud: không có OneDrive, dùng PostgreSQL 100%
+    ONEDRIVE_BASE_DIR = ''
+    ONEDRIVE_FFSTOCK_DIR = ''
+    ONEDRIVE_EMPTY_BAG_DIR = ''
+    ONEDRIVE_FORECAST_DIR = ''
+    ONEDRIVE_TONBON_DIR = ''
+    FORECAST_DIR_FALLBACK = FORECAST_DIR
+    FSTOCK_DIR_FALLBACK = FSTOCK_DIR
+    TONBON_DIR_FALLBACK = TONBON_DIR
+    FSTOCK_DIR_FFSTOCK = FSTOCK_DIR
+    FSTOCK_DIR_EMPTYBAG = FSTOCK_DIR
+    print("=" * 60)
+    print("[CLOUD] Dang chay tren Render Cloud - chi doc du lieu tu PostgreSQL (Neon Tech)")
+    print("=" * 60)
+else:
+    # Khi nhấn "Add shortcut to OneDrive" trên SharePoint, OneDrive tạo thư mục
+    # với tên rút gọn (không giữ nguyên cấu trúc SharePoint gốc).
+    # Đường dẫn thực tế đã xác minh ngày 26/05/2026.
 
-ONEDRIVE_BASE_DIR = r'C:\Users\haitr\OneDrive - Cong Ty Co Phan Chan Nuoi C.P. Viet Nam'
+    ONEDRIVE_BASE_DIR = r'C:\Users\haitr\OneDrive - Cong Ty Co Phan Chan Nuoi C.P. Viet Nam'
 
-def _find_onedrive_shortcut(base_dir, category):
-    """Tìm thư mục OneDrive shortcut dựa trên phân tích nội dung đặc trưng (thông minh).
-    
-    OneDrive có thể tự động đổi tên các shortcut trùng lặp (ví dụ: 'CPV Document - NĂM 2026' 
-    và 'CPV Document - NĂM 2026 1'). Vì vậy, phương pháp tốt nhất là quét bên trong 
-    thư mục để nhận diện đặc trưng của từng loại báo cáo.
-    """
-    import unicodedata
-    import glob
-    
-    def _strip_accents(s):
-        nfkd = unicodedata.normalize('NFKD', s.lower())
-        return ''.join(c for c in nfkd if not unicodedata.combining(c))
-    
-    if not os.path.isdir(base_dir):
-        return ''
+    def _find_onedrive_shortcut(base_dir, category):
+        """Tìm thư mục OneDrive shortcut dựa trên phân tích nội dung đặc trưng (thông minh).
         
-    for name in os.listdir(base_dir):
-        full = os.path.join(base_dir, name)
-        if not os.path.isdir(full):
-            continue
+        OneDrive có thể tự động đổi tên các shortcut trùng lặp (ví dụ: 'CPV Document - NĂM 2026' 
+        và 'CPV Document - NĂM 2026 1'). Vì vậy, phương pháp tốt nhất là quét bên trong 
+        thư mục để nhận diện đặc trưng của từng loại báo cáo.
+        """
+        import unicodedata
+        import glob
+        
+        def _strip_accents(s):
+            nfkd = unicodedata.normalize('NFKD', s.lower())
+            return ''.join(c for c in nfkd if not unicodedata.combining(c))
+        
+        if not os.path.isdir(base_dir):
+            return ''
             
-        if category == 'ffstock':
-            # Thư mục FFStock chứa file/thư mục chứa từ khóa "FFSTOCK"
-            matches = glob.glob(os.path.join(full, '**', '*FFSTOCK*'), recursive=True)
-            if matches:
-                # Phải chứa định dạng thư mục con theo tháng (ví dụ: "FFSTOCK THÁNG")
-                matches_ascii = [_strip_accents(m) for m in matches]
-                if any('ffstock thang' in m for m in matches_ascii):
+        for name in os.listdir(base_dir):
+            full = os.path.join(base_dir, name)
+            if not os.path.isdir(full):
+                continue
+                
+            if category == 'ffstock':
+                matches = glob.glob(os.path.join(full, '**', '*FFSTOCK*'), recursive=True)
+                if matches:
+                    matches_ascii = [_strip_accents(m) for m in matches]
+                    if any('ffstock thang' in m for m in matches_ascii):
+                        return full
+                        
+            elif category == 'empty_bag':
+                matches = glob.glob(os.path.join(full, '**', '*EMPTY BAG*'), recursive=True)
+                if matches:
                     return full
                     
-        elif category == 'empty_bag':
-            # Thư mục vỏ bao bì chứa file có tên "EMPTY BAG"
-            matches = glob.glob(os.path.join(full, '**', '*EMPTY BAG*'), recursive=True)
-            if matches:
-                return full
-                
-        elif category == 'forecast':
-            # Thư mục sale packing/forecast chứa file hoặc tên thư mục chứa chữ "forecast" hoặc "sale packing"
-            matches = glob.glob(os.path.join(full, '**', '*FORECAST*'), recursive=True)
-            if matches or 'sale packing' in name.lower():
-                return full
-                
-        elif category == 'tonbon':
-            # Thư mục tồn bồn chứa file/thư mục có tên "ton bon" hoặc "ton bin"
-            matches = glob.glob(os.path.join(full, '**', '*ton bon*'), recursive=True)
-            matches2 = glob.glob(os.path.join(full, '**', '*ton bin*'), recursive=True)
-            if matches or matches2 or 'ton bin' in _strip_accents(name) or 'ton bon' in _strip_accents(name):
-                return full
-                
-    # Fallback dự phòng: dùng keyword cơ bản nếu không tìm ra theo cấu trúc
-    keyword_map = {
-        'ffstock': 'NAM 2026',
-        'empty_bag': 'BAO BI',
-        'forecast': 'sale packing',
-        'tonbon': 'TON BIN'
-    }
-    keyword = keyword_map.get(category, '')
-    if not keyword:
-        return ''
-        
-    keyword_ascii = _strip_accents(keyword)
-    for name in os.listdir(base_dir):
-        full = os.path.join(base_dir, name)
-        if os.path.isdir(full) and keyword_ascii in _strip_accents(name):
-            return full
+            elif category == 'forecast':
+                matches = glob.glob(os.path.join(full, '**', '*FORECAST*'), recursive=True)
+                if matches or 'sale packing' in name.lower():
+                    return full
+                    
+            elif category == 'tonbon':
+                matches = glob.glob(os.path.join(full, '**', '*ton bon*'), recursive=True)
+                matches2 = glob.glob(os.path.join(full, '**', '*ton bin*'), recursive=True)
+                if matches or matches2 or 'ton bin' in _strip_accents(name) or 'ton bon' in _strip_accents(name):
+                    return full
+                    
+        # Fallback dự phòng
+        keyword_map = {
+            'ffstock': 'NAM 2026',
+            'empty_bag': 'BAO BI',
+            'forecast': 'sale packing',
+            'tonbon': 'TON BIN'
+        }
+        keyword = keyword_map.get(category, '')
+        if not keyword:
+            return ''
             
-    return ''
+        keyword_ascii = _strip_accents(keyword)
+        for name in os.listdir(base_dir):
+            full = os.path.join(base_dir, name)
+            if os.path.isdir(full) and keyword_ascii in _strip_accents(name):
+                return full
+                
+        return ''
 
-# --- FFStock (Tồn kho thành phẩm hàng ngày) ---
-ONEDRIVE_FFSTOCK_DIR = _find_onedrive_shortcut(ONEDRIVE_BASE_DIR, 'ffstock')
+    # --- FFStock (Tồn kho thành phẩm hàng ngày) ---
+    ONEDRIVE_FFSTOCK_DIR = _find_onedrive_shortcut(ONEDRIVE_BASE_DIR, 'ffstock')
 
-# --- Empty Bag (Bao bì hàng ngày) ---  
-ONEDRIVE_EMPTY_BAG_DIR = _find_onedrive_shortcut(ONEDRIVE_BASE_DIR, 'empty_bag')
+    # --- Empty Bag (Bao bì hàng ngày) ---  
+    ONEDRIVE_EMPTY_BAG_DIR = _find_onedrive_shortcut(ONEDRIVE_BASE_DIR, 'empty_bag')
 
-# --- Sale Packing Daily (Forecast) ---
-ONEDRIVE_FORECAST_DIR = _find_onedrive_shortcut(ONEDRIVE_BASE_DIR, 'forecast')
+    # --- Sale Packing Daily (Forecast) ---
+    ONEDRIVE_FORECAST_DIR = _find_onedrive_shortcut(ONEDRIVE_BASE_DIR, 'forecast')
 
-# --- Tồn Bồn (Bin Report) ---
-ONEDRIVE_TONBON_DIR = _find_onedrive_shortcut(ONEDRIVE_BASE_DIR, 'tonbon')
+    # --- Tồn Bồn (Bin Report) ---
+    ONEDRIVE_TONBON_DIR = _find_onedrive_shortcut(ONEDRIVE_BASE_DIR, 'tonbon')
 
-def _pick_dir(onedrive_dir, fallback_dir):
-    """Ưu tiên thư mục OneDrive nếu tồn tại, nếu không dùng fallback."""
-    if onedrive_dir and os.path.isdir(onedrive_dir):
-        return onedrive_dir
-    return fallback_dir
+    def _pick_dir(onedrive_dir, fallback_dir):
+        """Ưu tiên thư mục OneDrive nếu tồn tại, nếu không dùng fallback."""
+        if onedrive_dir and os.path.isdir(onedrive_dir):
+            return onedrive_dir
+        return fallback_dir
 
-# Lưu trữ các thư mục dự phòng gốc (fallback) để dùng khi OneDrive trống hoặc không tìm thấy file
-FORECAST_DIR_FALLBACK = FORECAST_DIR
-FSTOCK_DIR_FALLBACK = FSTOCK_DIR
-TONBON_DIR_FALLBACK = TONBON_DIR
+    # Lưu trữ các thư mục dự phòng gốc (fallback) để dùng khi OneDrive trống hoặc không tìm thấy file
+    FORECAST_DIR_FALLBACK = FORECAST_DIR
+    FSTOCK_DIR_FALLBACK = FSTOCK_DIR
+    TONBON_DIR_FALLBACK = TONBON_DIR
 
-# Override thư mục đầu vào: ưu tiên OneDrive, fallback về ổ D:
-FORECAST_DIR = _pick_dir(ONEDRIVE_FORECAST_DIR, FORECAST_DIR)
-FSTOCK_DIR_FFSTOCK = _pick_dir(ONEDRIVE_FFSTOCK_DIR, FSTOCK_DIR)     # Riêng FFStock
-FSTOCK_DIR_EMPTYBAG = _pick_dir(ONEDRIVE_EMPTY_BAG_DIR, FSTOCK_DIR)  # Riêng Empty Bag
-TONBON_DIR = _pick_dir(ONEDRIVE_TONBON_DIR, TONBON_DIR)
+    # Override thư mục đầu vào: ưu tiên OneDrive, fallback về ổ D:
+    FORECAST_DIR = _pick_dir(ONEDRIVE_FORECAST_DIR, FORECAST_DIR)
+    FSTOCK_DIR_FFSTOCK = _pick_dir(ONEDRIVE_FFSTOCK_DIR, FSTOCK_DIR)     # Riêng FFStock
+    FSTOCK_DIR_EMPTYBAG = _pick_dir(ONEDRIVE_EMPTY_BAG_DIR, FSTOCK_DIR)  # Riêng Empty Bag
+    TONBON_DIR = _pick_dir(ONEDRIVE_TONBON_DIR, TONBON_DIR)
 
-
-# Ghi log thư mục đang sử dụng khi khởi chạy
-def _log_active_dirs():
-    """In ra console thư mục dữ liệu đang dùng (OneDrive hay fallback)"""
-    import sys
-    try:
-        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-    except Exception:
-        pass
-    
-    try:
-        print("=" * 60)
-        print("[DIRS] CAU HINH THU MUC DU LIEU DANG SU DUNG:")
-        print(f"   Forecast:  {FORECAST_DIR}")
-        print(f"   FFStock:   {FSTOCK_DIR_FFSTOCK}")
-        print(f"   Empty Bag: {FSTOCK_DIR_EMPTYBAG}")
-        print(f"   Ton Bon:   {TONBON_DIR}")
-        print(f"   Silo:      {SILO_DIR}")
-        print(f"   Ba Cang:   {BACANG_DIR}")
+    # Ghi log thư mục đang sử dụng khi khởi chạy
+    def _log_active_dirs():
+        """In ra console thư mục dữ liệu đang dùng (OneDrive hay fallback)"""
+        try:
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
         
-        onedrive_active = any([
-            os.path.isdir(ONEDRIVE_FFSTOCK_DIR),
-            os.path.isdir(ONEDRIVE_EMPTY_BAG_DIR),
-            os.path.isdir(ONEDRIVE_FORECAST_DIR),
-            os.path.isdir(ONEDRIVE_TONBON_DIR),
-        ])
-        if onedrive_active:
-            print("   [OK] OneDrive dang hoat dong - doc du lieu tu SharePoint tu dong!")
-        else:
-            print("   [!] OneDrive chua duoc dong bo - dang dung thu muc cuc bo o D:")
-        print("=" * 60)
-    except Exception:
-        pass
+        try:
+            print("=" * 60)
+            print("[DIRS] CAU HINH THU MUC DU LIEU DANG SU DUNG:")
+            print(f"   Forecast:  {FORECAST_DIR}")
+            print(f"   FFStock:   {FSTOCK_DIR_FFSTOCK}")
+            print(f"   Empty Bag: {FSTOCK_DIR_EMPTYBAG}")
+            print(f"   Ton Bon:   {TONBON_DIR}")
+            print(f"   Silo:      {SILO_DIR}")
+            print(f"   Ba Cang:   {BACANG_DIR}")
+            
+            onedrive_active = any([
+                os.path.isdir(ONEDRIVE_FFSTOCK_DIR),
+                os.path.isdir(ONEDRIVE_EMPTY_BAG_DIR),
+                os.path.isdir(ONEDRIVE_FORECAST_DIR),
+                os.path.isdir(ONEDRIVE_TONBON_DIR),
+            ])
+            if onedrive_active:
+                print("   [OK] OneDrive dang hoat dong - doc du lieu tu SharePoint tu dong!")
+            else:
+                print("   [!] OneDrive chua duoc dong bo - dang dung thu muc cuc bo o D:")
+            print("=" * 60)
+        except Exception:
+            pass
 
-_log_active_dirs()
+    _log_active_dirs()
 
 
 # ============================================
