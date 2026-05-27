@@ -521,7 +521,7 @@ def sync_local_to_db(config, conn_str=DB_URI):
         for cat, fname in file_info.items():
             if fname:
                 # Đọc ngày chỉnh sửa gần nhất của tệp
-                mtime_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                mtime_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 meta_data.append((cat, fname, mtime_str))
         
         if meta_data:
@@ -1041,7 +1041,7 @@ def sync_category_to_db(config, category, conn_str=DB_URI) -> dict:
                 execute_values(cur, "INSERT INTO tonbon_detail (bon_id, product_code, tons) VALUES %s", tbd_data)
                 
         # Cập nhật metadata đồng bộ tệp
-        mtime_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        mtime_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         cur.execute("""
         INSERT INTO sync_metadata (category, filename, last_modified)
         VALUES (%s, %s, %s)
