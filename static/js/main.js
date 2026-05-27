@@ -109,6 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
         walkinOrdersList: document.getElementById('walkin-orders-list'),
         btnAddWalkinRow: document.getElementById('btn-add-walkin-row'),
         btnRunSolver: document.getElementById('btn-run-solver'),
+        btnRunWeeklySolver: document.getElementById('btn-run-weekly-solver'),
         planTerminalConsole: document.getElementById('plan-terminal-console'),
         btnClearTerminal: document.getElementById('btn-clear-terminal'),
         planResultSummary: document.getElementById('plan-result-summary'),
@@ -1294,6 +1295,100 @@ document.addEventListener('DOMContentLoaded', () => {
             elements.btnRunSolver.querySelector('.spinner-shown').style.display = 'none';
         }
     });
+
+    // Weekly solve engine dispatcher
+    if (elements.btnRunWeeklySolver) {
+        elements.btnRunWeeklySolver.addEventListener('click', async () => {
+            const targetDate = elements.planTargetDate.value;
+            if (!targetDate) {
+                showToast('Vui lòng chọn ngày đầu tuần cần lập kế hoạch!', 'error');
+                return;
+            }
+
+            // Interface adjustments: lock button state
+            elements.btnRunWeeklySolver.disabled = true;
+            elements.btnRunWeeklySolver.querySelector('.spinner-hidden').style.display = 'none';
+            elements.btnRunWeeklySolver.querySelector('.spinner-shown').style.display = 'inline-block';
+            
+            // Show terminal card
+            const terminalCard = document.querySelector('.plan-terminal-card');
+            if (terminalCard) {
+                terminalCard.style.display = 'flex';
+            }
+
+            // Clear terminal & prepare stream
+            elements.planTerminalConsole.innerHTML = '';
+            appendTerminalLine(`🚀 Đang chuẩn bị dữ liệu và kết nối đến solver lập KHSX CHO CẢ TUẦN...`, 'text-success');
+
+            try {
+                const response = await fetch('/api/generate-weekly-plan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        date: targetDate
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder('utf-8');
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+
+                    for (const line of lines) {
+                        const lineTrimmed = line.trim();
+                        if (lineTrimmed.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(lineTrimmed.slice(6));
+                                if (data.type === 'log') {
+                                    appendTerminalLine(data.text);
+                                } else if (data.type === 'complete') {
+                                    if (data.success) {
+                                        appendTerminalLine(`\n${data.message}`, 'text-success');
+                                        showToast(data.message, 'success');
+
+                                        // Hiển thị kế hoạch ngày đầu tuần làm mẫu
+                                        const d = new Date(targetDate);
+                                        // Tìm ngày thứ 2 của tuần
+                                        const dayOfWeek = d.getDay();
+                                        const diff = d.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+                                        const monday = new Date(d.setDate(diff));
+                                        
+                                        const formattedDateStr = `${String(monday.getDate()).padStart(2, '0')}-${String(monday.getMonth()+1).padStart(2, '0')}-${monday.getFullYear()}`;
+                                        loadPlanResults(formattedDateStr);
+                                    } else {
+                                        appendTerminalLine(`\n${data.message}`, 'text-error');
+                                        showToast(data.message, 'error');
+                                    }
+                                }
+                            } catch (e) {
+                                console.error('Failed to parse SSE JSON:', e);
+                            }
+                        }
+                    }
+                }
+
+            } catch (err) {
+                console.error(err);
+                appendTerminalLine(`❌ Đã xảy ra lỗi hệ thống nghiêm trọng: ${err.message}`, 'text-error');
+                showToast('Lỗi chạy solver tuần!', 'error');
+            } finally {
+                elements.btnRunWeeklySolver.disabled = false;
+                elements.btnRunWeeklySolver.querySelector('.spinner-hidden').style.display = 'inline-block';
+                elements.btnRunWeeklySolver.querySelector('.spinner-shown').style.display = 'none';
+            }
+        });
+    }
 
     function appendTerminalLine(text, className = '') {
         const line = document.createElement('div');

@@ -1508,6 +1508,106 @@ def generate_plan():
         return jsonify({'success': False, 'message': str(e)})
 
 
+@app.route('/api/generate-weekly-plan', methods=['POST'])
+def generate_weekly_plan():
+    """Lập kế hoạch tự động liên tục cho cả 6 ngày trong tuần (từ Thứ 2 đến Thứ 7)"""
+    try:
+        req_data = request.json or {}
+        start_date_str = req_data.get('date')  # YYYY-MM-DD (Thường chọn ngày thứ 2 đầu tuần)
+        
+        if not start_date_str:
+            return jsonify({'success': False, 'message': 'Ngày bắt đầu không hợp lệ'})
+            
+        # Xác định ngày Thứ 2 của tuần đó
+        start_dt = datetime.datetime.strptime(start_date_str, '%Y-%m-%d')
+        # Tìm ngày Thứ 2 (weekday = 0)
+        monday_dt = start_dt - datetime.timedelta(days=start_dt.weekday())
+        
+        # Danh sách 6 ngày làm việc (Thứ 2 đến Thứ 7)
+        week_days = []
+        for i in range(6):
+            dt = monday_dt + datetime.timedelta(days=i)
+            week_days.append({
+                'param': dt.strftime('%Y%m%d'),
+                'dmy': dt.strftime('%d-%m-%Y'),
+                'dow': i + 1  # 1 = Thứ 2, 6 = Thứ 7
+            })
+            
+        def sse_generator():
+            yield "data: " + json.dumps({'type': 'log', 'text': f"🚀 Khởi động chương trình lập KHSX TUẦN TỰ ĐỘNG..."}) + "\n\n"
+            yield "data: " + json.dumps({'type': 'log', 'text': f"📅 Tuần làm việc từ ngày {week_days[0]['dmy']} đến {week_days[-1]['dmy']}"}) + "\n\n"
+            yield "data: " + json.dumps({'type': 'log', 'text': "--------------------------------------------------"}) + "\n\n"
+            
+            success_count = 0
+            generated_files = []
+            
+            for day in week_days:
+                yield "data: " + json.dumps({
+                    'type': 'log', 
+                    'text': f"\n📅 [BẮT ĐẦU] LẬP KẾ HOẠCH CHO THỨ {day['dow'] + 1} ({day['dmy']})..."
+                }) + "\n\n"
+                
+                cmd = ['py', 'khsx_auto.py', '--date', day['param']]
+                
+                process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    encoding='utf-8',
+                    cwd=CURRENT_DIR
+                )
+                
+                # Stream log con
+                for line in process.stdout:
+                    line_clean = line.rstrip()
+                    if line_clean:
+                        yield "data: " + json.dumps({'type': 'log', 'text': f"   {line_clean}"}) + "\n\n"
+                        
+                process.wait()
+                
+                if process.returncode == 0:
+                    success_count += 1
+                    # Quét tìm file vừa tạo
+                    import glob
+                    pattern = os.path.join(config.OUTPUT_DIR, f"KHSX_{day['dmy']}*.xlsx")
+                    files = glob.glob(pattern)
+                    if files:
+                        files.sort(key=os.path.getmtime, reverse=True)
+                        fname = os.path.basename(files[0])
+                        generated_files.append(fname)
+                        yield "data: " + json.dumps({
+                            'type': 'log', 
+                            'text': f"   ✅ Đã xuất KHSX: {fname}"
+                        }) + "\n\n"
+                else:
+                    yield "data: " + json.dumps({
+                        'type': 'log', 
+                        'text': f"   ❌ LỖI lập KHSX cho Thứ {day['dow'] + 1} (Mã lỗi: {process.returncode}). Dừng tiến trình lập kế hoạch tuần!"
+                    }) + "\n\n"
+                    break
+                    
+            if success_count == len(week_days):
+                yield "data: " + json.dumps({
+                    'type': 'complete',
+                    'success': True,
+                    'output_files': generated_files,
+                    'message': f"🎉 ĐÃ LẬP THÀNH CÔNG KẾ HOẠCH CHO CẢ TUẦN ({success_count}/6 ngày)!"
+                }) + "\n\n"
+            else:
+                yield "data: " + json.dumps({
+                    'type': 'complete',
+                    'success': False,
+                    'message': f"⚠️ Chỉ lập được kế hoạch cho {success_count}/6 ngày trong tuần."
+                }) + "\n\n"
+                
+        return Response(sse_generator(), mimetype='text/event-stream')
+        
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': str(e)})
+
+
 # ============================================================
 # HELPER: PHÂN LOẠI VẬT NUÔI TỰ ĐỘNG TỪ MÃ CÁM
 # ============================================================

@@ -665,11 +665,19 @@
                                 </div>
                             </div>
                             
-                            <button class="btn btn-success btn-block py-3 mt-auto font-lg" id="btn-run-solver">
-                                <i data-lucide="play" class="spinner-hidden"></i>
-                                <span class="spinner-shown" style="display:none;"><i class="loading-icon animate-spin"></i> Đang tính toán...</span>
-                                BẮT ĐẦU TÍNH KHSX TỰ ĐỘNG
-                            </button>
+                            <div class="flex-column gap-2 mt-auto" style="width: 100%;">
+                                <button class="btn btn-success btn-block py-3 font-lg" id="btn-run-solver">
+                                    <i data-lucide="play" class="spinner-hidden"></i>
+                                    <span class="spinner-shown" style="display:none;"><i class="loading-icon animate-spin"></i> Đang tính toán...</span>
+                                    BẮT ĐẦU TÍNH KHSX TỰ ĐỘNG
+                                </button>
+                                
+                                <button class="btn btn-primary btn-block py-3 font-lg btn-premium-glow" id="btn-run-weekly-solver" style="background: linear-gradient(135deg, var(--indigo) 0%, var(--purple) 100%); border: none;">
+                                    <i data-lucide="calendar" class="spinner-hidden"></i>
+                                    <span class="spinner-shown" style="display:none;"><i class="loading-icon animate-spin"></i> Đang lập kế hoạch tuần...</span>
+                                    LẬP KẾ HOẠCH CẢ TUẦN (7 NGÀY)
+                                </button>
+                            </div>
                         </div>
                         
                         <!-- Right Control Bento: Realtime stream logs -->
