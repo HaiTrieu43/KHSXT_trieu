@@ -249,6 +249,16 @@ def init_db(conn_str=DB_URI):
     );
     """)
 
+    # 17. Bảng lưu trữ siêu dữ liệu đồng bộ các file Excel cục bộ để hiển thị cảnh báo dữ liệu tươi mới trên Cloud
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS sync_metadata (
+        category VARCHAR(50) PRIMARY KEY,
+        filename VARCHAR(255),
+        last_modified VARCHAR(50),
+        synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+
     conn.commit()
     cur.close()
     conn.close()
@@ -502,6 +512,27 @@ def sync_local_to_db(config, conn_str=DB_URI):
             adj_type, product_code, param_1, param_2, param_3, param_4, param_5, note
         ) VALUES %s
         """, adj_data)
+
+    # 17. Đồng bộ metadata tệp nguồn
+    file_info = data.get('_file_info', {})
+    if file_info:
+        print("📤 Đang cập nhật Sync Metadata...")
+        meta_data = []
+        for cat, fname in file_info.items():
+            if fname:
+                # Đọc ngày chỉnh sửa gần nhất của tệp
+                mtime_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                meta_data.append((cat, fname, mtime_str))
+        
+        if meta_data:
+            execute_values(cur, """
+            INSERT INTO sync_metadata (category, filename, last_modified)
+            VALUES %s
+            ON CONFLICT (category) DO UPDATE 
+            SET filename = EXCLUDED.filename, 
+                last_modified = EXCLUDED.last_modified,
+                synced_at = CURRENT_TIMESTAMP
+            """, meta_data)
 
     conn.commit()
     cur.close()
@@ -1009,6 +1040,17 @@ def sync_category_to_db(config, category, conn_str=DB_URI) -> dict:
             if tbd_data:
                 execute_values(cur, "INSERT INTO tonbon_detail (bon_id, product_code, tons) VALUES %s", tbd_data)
                 
+        # Cập nhật metadata đồng bộ tệp
+        mtime_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        cur.execute("""
+        INSERT INTO sync_metadata (category, filename, last_modified)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (category) DO UPDATE 
+        SET filename = EXCLUDED.filename,
+            last_modified = EXCLUDED.last_modified,
+            synced_at = CURRENT_TIMESTAMP
+        """, (category, os.path.basename(local_path), mtime_str))
+
         conn.commit()
         print(f"🎉 Đồng bộ danh mục {category.upper()} thành công lên Neon Tech Cloud Database!")
         return {

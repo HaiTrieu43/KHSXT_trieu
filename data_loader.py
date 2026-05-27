@@ -2570,6 +2570,16 @@ def load_all_data(config, target_date=None) -> dict:
             code_mapping[spec.product_code] = spec.product_name  # Override Code sheet nếu khác
     data['code_mapping'] = code_mapping
     
+    # Lưu metadata các file đã nạp để phục vụ đồng bộ dữ liệu tươi mới
+    data['_file_info'] = {
+        'forecast': os.path.basename(forecast_file) if forecast_file else None,
+        'silo_plan': os.path.basename(silo_file) if silo_file else None,
+        'bacang': os.path.basename(bacang_file) if bacang_file else None,
+        'ffstock': os.path.basename(ffstock_file) if ffstock_file else None,
+        'tonbon': os.path.basename(tonbon_file) if tonbon_file else None,
+        'empty_bag': os.path.basename(bag_file) if bag_file else None,
+    }
+    
     return data
 
 

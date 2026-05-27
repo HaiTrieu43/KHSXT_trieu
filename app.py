@@ -215,6 +215,8 @@ def get_data_freshness():
     - FFStock là báo cáo tham chiếu (anchor) — ngày FFStock mới nhất = ngày chuẩn
     - Các báo cáo hàng ngày (Empty Bag, Tồn Bồn) phải cùng ngày hoặc không quá 1 ngày
     - Các báo cáo hàng tuần (Forecast, SILO, Ba Cảng) phải cùng tuần
+    
+    Hỗ trợ chế độ chạy Cloud (đọc metadata đồng bộ từ DB) lẫn chế độ Local (quét file).
     """
     import re
     import glob
@@ -222,12 +224,73 @@ def get_data_freshness():
     warnings = []
     source_dates = {}
     
+    # 0. Xác định chế độ chạy (File hay Database)
+    db_mode = getattr(config, 'USE_POSTGRESQL', False) or os.environ.get('IS_CLOUD') == 'true'
+    
+    filenames = {}
+    bacang_mtime = None
+    
+    if db_mode:
+        try:
+            import db_manager
+            conn = db_manager.get_connection(getattr(config, 'DB_URI', db_manager.DB_URI))
+            cur = conn.cursor()
+            # Khởi tạo bảng sync_metadata nếu chưa tồn tại
+            cur.execute("""
+            CREATE TABLE IF NOT EXISTS sync_metadata (
+                category VARCHAR(50) PRIMARY KEY,
+                filename VARCHAR(255),
+                last_modified VARCHAR(50),
+                synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """)
+            cur.execute("SELECT category, filename, last_modified FROM sync_metadata;")
+            rows = cur.fetchall()
+            for row in rows:
+                cat, fname, mtime_str = row
+                filenames[cat] = fname
+                if cat == 'bacang' and mtime_str:
+                    try:
+                        # Parse mtime_str dạng '%Y-%m-%d %H:%M:%S'
+                        dt = datetime.datetime.strptime(mtime_str, '%Y-%m-%d %H:%M:%S').date()
+                        bacang_mtime = dt
+                    except:
+                        pass
+            cur.close()
+            conn.close()
+        except Exception as db_err:
+            print(f"⚠️ Lỗi đọc sync_metadata từ DB: {db_err}")
+            
+    # Các hàm trợ giúp trích xuất ngày và tuần từ tên file
+    def _extract_date_from_filename(filename, date_regex):
+        if not filename: return None
+        match = re.search(date_regex, filename)
+        if match:
+            groups = match.groups()
+            try:
+                if len(groups) == 3:
+                    d, m, y = int(groups[0]), int(groups[1]), int(groups[2])
+                    if y < 100: y += 2000
+                    return datetime.date(y, m, d)
+            except (ValueError, OverflowError):
+                pass
+        return None
+
+    def _extract_week_from_filename(filename):
+        if not filename: return None, None
+        wk_match = re.search(r'W(\d+)', filename, re.IGNORECASE)
+        best_week = int(wk_match.group(1)) if wk_match else None
+        best_range = None
+        range_match = re.search(r'(\d{1,2})\s*[-/]\s*(\d{1,2})\s*[-/]\s*(\d{1,2})', filename)
+        if range_match:
+            best_range = f"{range_match.group(1)}-{range_match.group(2)}/{range_match.group(3)}"
+        return best_week, best_range
+
     def _extract_date_from_files(directory, pattern, date_regex, source_name):
-        """Trích xuất ngày mới nhất từ tên file."""
+        """Trích xuất ngày mới nhất từ tên file cục bộ."""
         if not directory or not os.path.isdir(directory):
             return None
         
-        # Tìm file mới nhất theo pattern (recursive)
         search_pattern = os.path.join(directory, '**', pattern)
         files = glob.glob(search_pattern, recursive=True)
         files = [f for f in files if not os.path.basename(f).startswith('~$')]
@@ -237,23 +300,13 @@ def get_data_freshness():
         
         dates = []
         for filepath in files:
-            filename = os.path.basename(filepath)
-            match = re.search(date_regex, filename)
-            if match:
-                groups = match.groups()
-                try:
-                    if len(groups) == 3:
-                        d, m, y = int(groups[0]), int(groups[1]), int(groups[2])
-                        if y < 100: y += 2000
-                        dt = datetime.date(y, m, d)
-                        dates.append(dt)
-                except (ValueError, OverflowError):
-                    pass
-        
+            dt = _extract_date_from_filename(os.path.basename(filepath), date_regex)
+            if dt:
+                dates.append(dt)
         return max(dates) if dates else None
-    
+
     def _extract_week_from_files(directory, pattern, source_name):
-        """Trích xuất tuần mới nhất từ tên file Forecast/SILO."""
+        """Trích xuất tuần mới nhất từ tên file Forecast/SILO cục bộ."""
         if not directory or not os.path.isdir(directory):
             return None, None
         
@@ -267,72 +320,82 @@ def get_data_freshness():
         best_week = None
         best_range = None
         for filepath in files:
-            filename = os.path.basename(filepath)
-            # Pattern: W22.(25-30-05-) or W21-18-23-05-2026
-            wk_match = re.search(r'W(\d+)', filename, re.IGNORECASE)
-            if wk_match:
-                week_num = int(wk_match.group(1))
-                # Tìm date range trong tên file
-                range_match = re.search(r'(\d{1,2})\s*[-/]\s*(\d{1,2})\s*[-/]\s*(\d{1,2})', filename)
-                if range_match:
-                    best_range = f"{range_match.group(1)}-{range_match.group(2)}/{range_match.group(3)}"
-                if best_week is None or week_num > best_week:
-                    best_week = week_num
-        
+            w, r = _extract_week_from_filename(os.path.basename(filepath))
+            if w:
+                if best_week is None or w > best_week:
+                    best_week = w
+                    best_range = r
         return best_week, best_range
-    
+
     try:
-        # 1. FFStock — Báo cáo tham chiếu (anchor)
-        ffstock_dir = getattr(config, 'FSTOCK_DIR_FFSTOCK', config.FSTOCK_DIR)
-        ffstock_date = _extract_date_from_files(
-            ffstock_dir, '*FFSTOCK*.xls*',
-            r'FFSTOCK\s*(\d{1,2})\s*[-/:.\s]\s*(\d{1,2})\s*[-/:.\s]\s*(\d{2,4})',
-            'FFStock'
-        )
+        if db_mode:
+            # === CHẾ ĐỘ CLOUD DATABASE ===
+            ffstock_date = _extract_date_from_filename(
+                filenames.get('ffstock'),
+                r'FFSTOCK\s*(\d{1,2})\s*[-/:.\s]\s*(\d{1,2})\s*[-/:.\s]\s*(\d{2,4})'
+            )
+            emptybag_date = _extract_date_from_filename(
+                filenames.get('empty_bag'),
+                r'(\d{1,2})\s*[-/:.\s]\s*(\d{1,2})\s*[-/:.\s]\s*(\d{2,4})'
+            )
+            tonbon_date = _extract_date_from_filename(
+                filenames.get('tonbon'),
+                r'(\d{1,2})\s*[-./:]\s*(\d{1,2})\s*[-./:]\s*(\d{2,4})'
+            )
+            forecast_week, forecast_range = _extract_week_from_filename(filenames.get('forecast'))
+            silo_week, silo_range = _extract_week_from_filename(filenames.get('silo_plan'))
+        else:
+            # === CHẾ ĐỘ LOCAL FILE ===
+            # 1. FFStock — Báo cáo tham chiếu (anchor)
+            ffstock_dir = getattr(config, 'FSTOCK_DIR_FFSTOCK', config.FSTOCK_DIR)
+            ffstock_date = _extract_date_from_files(
+                ffstock_dir, '*FFSTOCK*.xls*',
+                r'FFSTOCK\s*(\d{1,2})\s*[-/:.\s]\s*(\d{1,2})\s*[-/:.\s]\s*(\d{2,4})',
+                'FFStock'
+            )
+            
+            # 2. Empty Bag — Báo cáo hàng ngày
+            emptybag_dir = getattr(config, 'FSTOCK_DIR_EMPTYBAG', config.FSTOCK_DIR)
+            emptybag_date = _extract_date_from_files(
+                emptybag_dir, '*EMPTY BAG*.xls*',
+                r'(\d{1,2})\s*[-/:.\s]\s*(\d{1,2})\s*[-/:.\s]\s*(\d{2,4})',
+                'Empty Bag'
+            )
+            
+            # 3. Tồn Bồn — Báo cáo hàng ngày
+            tonbon_date = _extract_date_from_files(
+                config.TONBON_DIR, '*ton bon*.*',
+                r'(\d{1,2})\s*[-./:]\s*(\d{1,2})\s*[-./:]\s*(\d{2,4})',
+                'Tồn Bồn'
+            )
+            
+            # 4. Forecast — Báo cáo tuần
+            forecast_week, forecast_range = _extract_week_from_files(
+                config.FORECAST_DIR, '*FORECAST*.xlsx', 'Forecast'
+            )
+            
+            # 5. SILO — Báo cáo tuần
+            silo_week, silo_range = _extract_week_from_files(
+                config.SILO_DIR, '*SILO*.xlsx', 'SILO'
+            )
+            
+            # 6. Ba Cảng — Báo cáo tuần
+            bacang_dir = config.BACANG_DIR
+            bacang_files = glob.glob(os.path.join(bacang_dir, '*CANG*.xlsx')) if os.path.isdir(bacang_dir) else []
+            bacang_files = [f for f in bacang_files if not os.path.basename(f).startswith('~$')]
+            if bacang_files:
+                latest_bc = max(bacang_files, key=os.path.getmtime)
+                bacang_mtime = datetime.date.fromtimestamp(os.path.getmtime(latest_bc))
+
+        # Lưu thông tin ngày hiển thị
         if ffstock_date:
             source_dates['ffstock'] = {'date': ffstock_date, 'label': 'FFStock Tồn Kho'}
-        
-        # 2. Empty Bag — Báo cáo hàng ngày
-        emptybag_dir = getattr(config, 'FSTOCK_DIR_EMPTYBAG', config.FSTOCK_DIR)
-        emptybag_date = _extract_date_from_files(
-            emptybag_dir, '*EMPTY BAG*.xls*',
-            r'(\d{1,2})\s*[-/:.\s]\s*(\d{1,2})\s*[-/:.\s]\s*(\d{2,4})',
-            'Empty Bag'
-        )
         if emptybag_date:
             source_dates['empty_bag'] = {'date': emptybag_date, 'label': 'Bao Bì (Empty Bag)'}
-        
-        # 3. Tồn Bồn — Báo cáo hàng ngày
-        tonbon_date = _extract_date_from_files(
-            config.TONBON_DIR, '*ton bon*.*',
-            r'(\d{1,2})\s*[-./:]\s*(\d{1,2})\s*[-./:]\s*(\d{2,4})',
-            'Tồn Bồn'
-        )
         if tonbon_date:
             source_dates['tonbon'] = {'date': tonbon_date, 'label': 'Tồn Bồn Thành Phẩm'}
-        
-        # 4. Forecast — Báo cáo tuần
-        forecast_dir = config.FORECAST_DIR
-        forecast_week, forecast_range = _extract_week_from_files(
-            forecast_dir, '*FORECAST*.xlsx', 'Forecast'
-        )
-        
-        # 5. SILO — Báo cáo tuần
-        silo_week, silo_range = _extract_week_from_files(
-            config.SILO_DIR, '*SILO*.xlsx', 'SILO'
-        )
-        
-        # 6. Ba Cảng — Báo cáo tuần (không có week number rõ ràng, dùng mtime)
-        bacang_dir = config.BACANG_DIR
-        bacang_files = glob.glob(os.path.join(bacang_dir, '*CANG*.xlsx')) if os.path.isdir(bacang_dir) else []
-        bacang_files = [f for f in bacang_files if not os.path.basename(f).startswith('~$')]
-        bacang_mtime = None
-        if bacang_files:
-            latest_bc = max(bacang_files, key=os.path.getmtime)
-            bacang_mtime = datetime.date.fromtimestamp(os.path.getmtime(latest_bc))
-        
+            
         # === SO SÁNH VÀ TẠO CẢNH BÁO ===
-        
         today = datetime.date.today()
         anchor_date = ffstock_date  # FFStock là ngày chuẩn
         
@@ -340,7 +403,7 @@ def get_data_freshness():
             warnings.append({
                 'level': 'critical',
                 'source': 'FFStock',
-                'message': 'Không tìm thấy file FFStock — không thể xác định ngày tham chiếu!',
+                'message': 'Không tìm thấy dữ liệu FFStock — không thể xác định ngày tham chiếu!',
                 'icon': '🚫'
             })
         else:
@@ -361,15 +424,15 @@ def get_data_freshness():
                     warnings.append({
                         'level': 'critical' if delta > 1 else 'warning',
                         'source': 'Empty Bag',
-                        'message': f'Báo cáo Bao Bì mới nhất ngày {emptybag_date.strftime("%d/%m/%Y")} — THIẾU {delta} ngày so với FFStock ({anchor_date.strftime("%d/%m/%Y")})',
+                        'message': f'Dữ liệu Bao Bì mới nhất ngày {emptybag_date.strftime("%d/%m/%Y")} — THIẾU {delta} ngày so với FFStock ({anchor_date.strftime("%d/%m/%Y")})',
                         'icon': '📋',
-                        'action': 'Kiểm tra và upload báo cáo Empty Bag mới nhất'
+                        'action': 'Kiểm tra và đồng bộ báo cáo Empty Bag mới nhất'
                     })
             else:
                 warnings.append({
                     'level': 'critical',
                     'source': 'Empty Bag',
-                    'message': 'Không tìm thấy file báo cáo Bao Bì (Empty Bag)!',
+                    'message': 'Không tìm thấy dữ liệu báo cáo Bao Bì (Empty Bag)!',
                     'icon': '📋'
                 })
             
@@ -380,15 +443,15 @@ def get_data_freshness():
                     warnings.append({
                         'level': 'critical' if delta > 1 else 'warning',
                         'source': 'Tồn Bồn',
-                        'message': f'Báo cáo Tồn Bồn mới nhất ngày {tonbon_date.strftime("%d/%m/%Y")} — THIẾU {delta} ngày so với FFStock ({anchor_date.strftime("%d/%m/%Y")})',
+                        'message': f'Dữ liệu Tồn Bồn mới nhất ngày {tonbon_date.strftime("%d/%m/%Y")} — THIẾU {delta} ngày so với FFStock ({anchor_date.strftime("%d/%m/%Y")})',
                         'icon': '🏭',
-                        'action': 'Kiểm tra và upload báo cáo Tồn Bồn mới nhất'
+                        'action': 'Kiểm tra và đồng bộ báo cáo Tồn Bồn mới nhất'
                     })
             else:
                 warnings.append({
                     'level': 'warning',
                     'source': 'Tồn Bồn',
-                    'message': 'Không tìm thấy file báo cáo Tồn Bồn!',
+                    'message': 'Không tìm thấy dữ liệu báo cáo Tồn Bồn!',
                     'icon': '🏭'
                 })
         
@@ -402,13 +465,13 @@ def get_data_freshness():
                     'source': 'Forecast',
                     'message': f'Forecast đang ở Tuần {forecast_week} ({forecast_range or "?"}) — hiện tại là Tuần {current_week}',
                     'icon': '📊',
-                    'action': 'Cần upload Forecast tuần mới'
+                    'action': 'Cần đồng bộ Forecast tuần mới'
                 })
         else:
             warnings.append({
                 'level': 'critical',
                 'source': 'Forecast',
-                'message': 'Không tìm thấy file Forecast!',
+                'message': 'Không tìm thấy dữ liệu Forecast!',
                 'icon': '📊'
             })
         
@@ -419,13 +482,13 @@ def get_data_freshness():
                     'source': 'SILO',
                     'message': f'Kế hoạch SILO đang ở Tuần {silo_week} ({silo_range or "?"}) — hiện tại là Tuần {current_week}',
                     'icon': '🏗️',
-                    'action': 'Cần upload kế hoạch SILO tuần mới'
+                    'action': 'Cần đồng bộ kế hoạch SILO tuần mới'
                 })
         else:
             warnings.append({
                 'level': 'warning',
                 'source': 'SILO',
-                'message': 'Không tìm thấy file kế hoạch SILO!',
+                'message': 'Không tìm thấy dữ liệu kế hoạch SILO!',
                 'icon': '🏗️'
             })
         
@@ -436,9 +499,9 @@ def get_data_freshness():
                 warnings.append({
                     'level': 'warning',
                     'source': 'Ba Cảng',
-                    'message': f'Kế hoạch Ba Cảng chưa cập nhật — file cũ {bc_days_old} ngày',
+                    'message': f'Kế hoạch Ba Cảng chưa cập nhật — dữ liệu cũ {bc_days_old} ngày',
                     'icon': '⚓',
-                    'action': 'Cần upload kế hoạch Ba Cảng tuần mới'
+                    'action': 'Cần đồng bộ kế hoạch Ba Cảng tuần mới'
                 })
         
         # Build response
