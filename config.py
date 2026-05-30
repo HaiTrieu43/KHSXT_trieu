@@ -224,7 +224,7 @@ else:
         except Exception:
             pass
 
-    _log_active_dirs()
+    # _log_active_dirs()
 
 
 # ============================================

@@ -1719,6 +1719,49 @@ def load_doh_data_for_sequence(sequence_items):
 
 
 # ============================================================
+# API: DANH SÁCH CÁC NGÀY ĐÃ LẬP KẾ HOẠCH
+# ============================================================
+
+@app.route('/api/planned-dates', methods=['GET'])
+def get_planned_dates():
+    """Lấy danh sách tất cả các ngày đã lập kế hoạch thành công"""
+    try:
+        if getattr(config, 'USE_POSTGRESQL', False):
+            import db_manager
+            conn = db_manager.get_connection()
+            cur = conn.cursor()
+            cur.execute("SELECT date_str FROM plan_outputs ORDER BY date_str DESC;")
+            rows = cur.fetchall()
+            cur.close()
+            conn.close()
+            dates = [r[0] for r in rows if r[0]]
+        else:
+            import glob
+            pattern = os.path.join(config.OUTPUT_DIR, "KHSX_*.xlsx")
+            files = glob.glob(pattern)
+            dates = []
+            for f in files:
+                fname = os.path.basename(f)
+                parts = fname.split('_')
+                if len(parts) >= 2:
+                    d_str = parts[1][:10]
+                    if d_str not in dates:
+                        dates.append(d_str)
+                        
+        def parse_date(d_str):
+            try:
+                return datetime.datetime.strptime(d_str, '%d-%m-%Y')
+            except:
+                return datetime.datetime.min
+                
+        dates.sort(key=parse_date, reverse=True)
+        return jsonify({'success': True, 'dates': dates})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': str(e)})
+
+
+# ============================================================
 # API: TẢI CHI TIẾT KẾ HOẠCH ĐÃ LẬP (PL, PACKAGING, SEQUENCE)
 # ============================================================
 

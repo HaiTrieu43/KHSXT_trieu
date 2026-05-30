@@ -2045,7 +2045,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Tự động nạp lại kế hoạch khi thay đổi ngày trên ô Datepicker
+    // Tự động nạp lại kế hoạch hoặc chạy giải thuật lập kế hoạch tự động ngầm khi thay đổi ngày
     if (elements.planTargetDate) {
         elements.planTargetDate.addEventListener('change', async () => {
             const targetDate = elements.planTargetDate.value;
@@ -2064,14 +2064,17 @@ document.addEventListener('DOMContentLoaded', () => {
                         await loadPlanResults(formattedDateStr);
                         showToast(`Nạp thành công kế hoạch ngày ${formattedDateStr}!`, 'success');
                     } else {
+                        // Ẩn bảng cũ để tránh hiển thị sai lệch
                         if (elements.btnGlobalExportExcel) {
                             elements.btnGlobalExportExcel.style.display = 'none';
                         }
                         if (elements.dashboardPlanCard) {
                             elements.dashboardPlanCard.style.display = 'none';
                         }
-                        appendTerminalLine(`⚠️ Ngày ${formattedDateStr} chưa được lập kế hoạch sản xuất.`, 'text-warning');
-                        appendTerminalLine(`👉 Nhấn nút "BẮT ĐẦU TÍNH KHSX TỰ ĐỘNG" hoặc "LẬP KẾ HOẠCH CẢ TUẦN (7 NGÀY)" để tính toán.`, 'text-warning');
+                        
+                        // Chưa có kế hoạch -> Tự động chạy solver ngầm lập KHSX lập tức!
+                        appendTerminalLine(`⚡ Ngày ${formattedDateStr} chưa được lập kế hoạch. Hệ thống đang tự động lập kế hoạch ngầm...`, 'text-warning');
+                        await runBackgroundSolver(targetDate, formattedDateStr);
                     }
                 } catch (err) {
                     console.error("Lỗi khi chuyển ngày kế hoạch:", err);
@@ -2081,7 +2084,152 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Lịch xem nhanh ngày đã lập KHSX dưới dạng Pill Badges
+    async function loadPlannedDatesPills() {
+        const container = document.getElementById('planned-dates-container');
+        if (!container) return;
+        
+        try {
+            const res = await fetch('/api/planned-dates');
+            const json = await res.json();
+            
+            if (json.success && json.dates && json.dates.length > 0) {
+                container.innerHTML = '';
+                json.dates.forEach(d_str => {
+                    const parts = d_str.split('-');
+                    const shortStr = parts.length >= 2 ? `${parts[0]}/${parts[1]}` : d_str;
+                    
+                    const pill = document.createElement('button');
+                    pill.className = 'planned-date-pill';
+                    pill.setAttribute('data-date', d_str);
+                    pill.style.cssText = `
+                        background: rgba(34, 211, 238, 0.1); 
+                        border: 1px solid rgba(34, 211, 238, 0.25); 
+                        color: #22d3ee; 
+                        padding: 4px 10px; 
+                        border-radius: 20px; 
+                        font-size: 0.8rem; 
+                        font-weight: 600; 
+                        cursor: pointer; 
+                        transition: all 0.2s ease; 
+                        display: inline-flex; 
+                        align-items: center; 
+                        gap: 5px;
+                        box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+                    `;
+                    pill.innerHTML = `<span style="display:inline-block; width: 6px; height: 6px; background: #22d3ee; border-radius: 50%; box-shadow: 0 0 6px #22d3ee;"></span> ${shortStr}`;
+                    
+                    pill.onmouseover = () => { 
+                        pill.style.background = 'rgba(34, 211, 238, 0.25)'; 
+                        pill.style.borderColor = 'rgba(34, 211, 238, 0.5)';
+                        pill.style.transform = 'translateY(-1px)';
+                    };
+                    pill.onmouseout = () => { 
+                        pill.style.background = 'rgba(34, 211, 238, 0.1)'; 
+                        pill.style.borderColor = 'rgba(34, 211, 238, 0.25)';
+                        pill.style.transform = 'translateY(0)';
+                    };
+                    
+                    pill.addEventListener('click', async () => {
+                        const d_parts = d_str.split('-');
+                        if (d_parts.length === 3) {
+                            const isoDate = `${d_parts[2]}-${d_parts[1]}-${d_parts[0]}`;
+                            elements.planTargetDate.value = isoDate;
+                            
+                            document.querySelectorAll('.planned-date-pill').forEach(p => {
+                                p.style.background = 'rgba(34, 211, 238, 0.1)';
+                                p.style.borderColor = 'rgba(34, 211, 238, 0.25)';
+                            });
+                            pill.style.background = 'rgba(34, 211, 238, 0.35)';
+                            pill.style.borderColor = '#22d3ee';
+                            
+                            appendTerminalLine(`🔍 Nạp nhanh kế hoạch đã có cho ngày: ${d_str}...`, 'text-info');
+                            await loadPlanResults(d_str);
+                            showToast(`Đã nạp thành công kế hoạch ngày ${d_str}!`, 'success');
+                        }
+                    });
+                    
+                    container.appendChild(pill);
+                });
+            } else {
+                container.innerHTML = '<span class="text-muted text-xs">Chưa có ngày nào được lập kế hoạch.</span>';
+            }
+        } catch (err) {
+            console.error("loadPlannedDatesPills failed:", err);
+            container.innerHTML = '<span class="text-error text-xs">Lỗi khi tải lịch ngày.</span>';
+        }
+    }
+
+    // Chạy solver ngầm trong nền không hiện bảng terminal log
+    async function runBackgroundSolver(targetDate, formattedDateStr) {
+        showToast(`Đang tự động lập kế hoạch cho ngày ${formattedDateStr} (chạy ngầm)...`, 'info');
+        
+        elements.btnRunSolver.disabled = true;
+        elements.btnRunSolver.querySelector('.spinner-hidden').style.display = 'none';
+        elements.btnRunSolver.querySelector('.spinner-shown').style.display = 'inline-block';
+        
+        try {
+            const response = await fetch('/api/generate-plan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    date: targetDate,
+                    walkin_orders: []
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop();
+
+                for (const line of lines) {
+                    const lineTrimmed = line.trim();
+                    if (lineTrimmed.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(lineTrimmed.slice(6));
+                            if (data.type === 'log') {
+                                appendTerminalLine(data.text);
+                            } else if (data.type === 'complete') {
+                                if (data.success) {
+                                    showToast(`🎉 Tự động lập kế hoạch thành công ngày ${formattedDateStr}!`, 'success');
+                                    await loadPlanResults(formattedDateStr);
+                                    await loadPlannedDatesPills();
+                                } else {
+                                    showToast(`Không có dữ liệu đầu vào hoặc lỗi: ${data.message}`, 'error');
+                                    appendTerminalLine(`\n${data.message}`, 'text-error');
+                                }
+                            }
+                        } catch (e) {
+                            console.error('Failed to parse SSE JSON:', e);
+                        }
+                    }
+                }
+            }
+
+        } catch (err) {
+            console.error(err);
+            showToast(`Lỗi hệ thống: ${err.message}`, 'error');
+        } finally {
+            elements.btnRunSolver.disabled = false;
+            elements.btnRunSolver.querySelector('.spinner-hidden').style.display = 'inline-block';
+            elements.btnRunSolver.querySelector('.spinner-shown').style.display = 'none';
+        }
+    }
+
     loadDataSourcesStatus();
     loadDataFreshness();
     initAutoPlanDetection();
+    loadPlannedDatesPills();
 });

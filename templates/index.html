@@ -648,6 +648,15 @@
                                 <input type="date" id="plan-target-date" class="form-control">
                             </div>
                             
+                            <div class="input-group" style="margin-top: 10px; margin-bottom: 5px;">
+                                <label style="display: flex; align-items: center; gap: 4px; font-size: 0.9rem; color: #a5f3fc; font-weight: 500;">
+                                    <i data-lucide="calendar" style="width: 16px; height: 16px;"></i> Lịch xem nhanh ngày đã lập KHSX:
+                                </label>
+                                <div id="planned-dates-container" style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; max-height: 120px; overflow-y: auto; padding: 2px;">
+                                    <span class="text-muted text-xs">Đang tải danh sách...</span>
+                                </div>
+                            </div>
+                            
                             <!-- Dynamic Walkin Orders Section -->
                             <div class="walkin-orders-section flex-column gap-2">
                                 <div class="flex-between">
@@ -680,8 +689,8 @@
                             </div>
                         </div>
                         
-                        <!-- Right Control Bento: Realtime stream logs -->
-                        <div class="bento-card col-span-2 glass-card flex-column gap-2 plan-terminal-card" style="display: none;">
+                        <!-- Right Control Bento: Realtime stream logs (Hidden per user request) -->
+                        <div class="bento-card col-span-2 glass-card flex-column gap-2 plan-terminal-card" style="display: none !important;">
                             <div class="card-header flex-between">
                                 <h3 class="card-title text-cyan"><i data-lucide="terminal" class="inline-icon"></i> Log Console Tiễn Trình Thời Gian Thực</h3>
                                 <button class="btn btn-secondary btn-xs" id="btn-clear-terminal">Xoá log</button>
