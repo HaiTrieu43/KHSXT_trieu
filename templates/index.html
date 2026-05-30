@@ -657,8 +657,8 @@
                                 </div>
                             </div>
                             
-                            <!-- Dynamic Walkin Orders Section -->
-                            <div class="walkin-orders-section flex-column gap-2">
+                            <!-- Dynamic Walkin Orders Section (Hidden per user request) -->
+                            <div class="walkin-orders-section flex-column gap-2" style="display: none !important;">
                                 <div class="flex-between">
                                     <label>Đơn Vãng Lai / Bổ Sung Gấp</label>
                                     <button class="btn btn-secondary btn-xs" id="btn-add-walkin-row">
@@ -674,7 +674,8 @@
                                 </div>
                             </div>
                             
-                            <div class="flex-column gap-2 mt-auto" style="width: 100%;">
+                            <!-- Solver Buttons (Hidden per user request - calculations run automatically in background) -->
+                            <div class="flex-column gap-2 mt-auto" style="width: 100%; display: none !important;">
                                 <button class="btn btn-success btn-block py-3 font-lg" id="btn-run-solver">
                                     <i data-lucide="play" class="spinner-hidden"></i>
                                     <span class="spinner-shown" style="display:none;"><i class="loading-icon animate-spin"></i> Đang tính toán...</span>
