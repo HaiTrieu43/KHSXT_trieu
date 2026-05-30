@@ -4,6 +4,7 @@ C.P. Vietnam - Chi nhánh Bình Dương
 """
 import os
 import sys
+from copy import copy
 from models import DemandItem, Priority
 
 # Định nghĩa các hằng số hao hụt thời gian
@@ -31,6 +32,54 @@ SILO_MAPPING = {
     'PL6': [129, 130],
     'PL7': [129, 130]
 }
+
+
+def _find_pellet_config(product_code, packing_size, die_size, is_mash, matrix):
+    p_code = str(product_code).strip().upper()
+    pack = str(packing_size).strip().upper() if packing_size else '25'
+    
+    # 1. Thử các key kết hợp chính xác
+    if is_mash:
+        key = f"{p_code}{pack}M"
+        if key in matrix:
+            return matrix[key]
+            
+    if die_size:
+        die_str = str(die_size)
+        if die_str.endswith('.0'):
+            die_str_alt = die_str[:-2]
+        else:
+            die_str_alt = die_str + ".0"
+            
+        keys_to_try = [
+            f"{p_code}{pack}{die_str}",
+            f"{p_code}{pack}{die_str_alt}"
+        ]
+        if pack == 'SILO':
+            keys_to_try.append(f"{p_code}SILOSILO")
+            
+        for k in keys_to_try:
+            if k in matrix:
+                return matrix[k]
+                
+    # 2. Thử tìm gần đúng
+    prefix = f"{p_code}{pack}"
+    matches = []
+    for k, cfg in matrix.items():
+        if k.startswith(prefix):
+            matches.append((k, cfg))
+    if matches:
+        return matches[0][1]
+        
+    # 3. Thử tìm rộng hơn
+    matches_broad = []
+    for k, cfg in matrix.items():
+        if k.startswith(p_code):
+            matches_broad.append((k, cfg))
+    if matches_broad:
+        return matches_broad[0][1]
+        
+    return None
 
 
 def get_die_size(product_code, congsuat_dict, fix_code_pellet_dict):
@@ -228,14 +277,101 @@ def plan_pellet_shifts(demand_list, tonbon_detail, congsuat_dict, fix_code_pelle
             for item in items:
                 print(f"  📥 TỒN ĐẦU {m}: Cám {item['product_code']} - Bồn {item['silo']} ({item['tons']:.2f} tấn)")
                 
-    # 3. Phân bổ nhu cầu sản xuất ngày hôm nay vào các máy
+    # 3. Phân bổ nhu cầu sản xuất ngày hôm nay vào các máy với tính năng Chia mẻ tự động (Auto Workload Splitting)
     machine_jobs = {f"PL{i}": [] for i in range(1, 8)}
     
-    # Gán các sản phẩm Pellet vào các máy tương ứng theo thuộc tính line_cv
-    for item in pellet_demands:
-        line = str(item.line_cv).strip().upper()
-        if line in machine_jobs:
-            machine_jobs[line].append(item)
+    # Để tính tải động, ta lưu trữ tổng giờ chạy hiện tại của mỗi máy
+    # Khởi tạo bằng tồn đầu
+    current_loads = {f"PL{i}": 0.0 for i in range(1, 8)}
+    for m, items in ton_dau_by_machine.items():
+        for td in items:
+            tph = get_tph(td['product_code'], m, congsuat_dict, fix_code_pellet_dict)
+            current_loads[m] += td['tons'] / tph if tph > 0 else 0.0
+            current_loads[m] += CHANGEOVER_TIME
+            
+    # Duyệt qua danh sách nhu cầu pellet, ưu tiên xử lý các sản phẩm có sản lượng lớn trước
+    pellet_demands_sorted = sorted(pellet_demands, key=lambda x: -x.batches)
+    
+    for item in pellet_demands_sorted:
+        p_code = item.product_code
+        spec = congsuat_dict.get(p_code, None)
+        die_size = spec.die_size if spec else 0.0
+        line_cv_default = spec.line_cv if spec else ''
+        is_mash = (line_cv_default == 'M')
+        
+        cfg = _find_pellet_config(p_code, item.packing_size, die_size, is_mash, fix_code_pellet_dict)
+        compatible_lines = []
+        if cfg and cfg['priorities']:
+            for p_line in cfg['priorities']:
+                norm_line = str(p_line).strip().upper()
+                if norm_line.isdigit(): norm_line = f"PL{norm_line}"
+                if norm_line in machine_jobs:
+                    compatible_lines.append(norm_line)
+        if cfg and cfg['default_line']:
+            def_line = str(cfg['default_line']).strip().upper()
+            if def_line.isdigit(): def_line = f"PL{def_line}"
+            if def_line in machine_jobs and def_line not in compatible_lines:
+                compatible_lines.append(def_line)
+                
+        # Ràng buộc loại trừ PL2 cho 566 và 567S cưỡng chế
+        if p_code.startswith('566') or p_code.startswith('567S'):
+            compatible_lines = [m for m in compatible_lines if m != 'PL2']
+            
+        if not compatible_lines:
+            fallback = str(item.line_cv).strip().upper()
+            if fallback in machine_jobs:
+                compatible_lines = [fallback]
+            else:
+                compatible_lines = ['PL1']
+                
+        # Chia mẻ cho các sản phẩm lớn (ví dụ >= 5 mẻ để dàn đều tải hoàn hảo)
+        if item.batches >= 5 and len(compatible_lines) > 1:
+            total_batches = item.batches
+            compatible_lines.sort(key=lambda m: current_loads[m])
+            shares = {m: 0 for m in compatible_lines}
+            remaining_batches = total_batches
+            
+            while remaining_batches > 0:
+                best_m = None
+                best_load = float('inf')
+                for m in compatible_lines:
+                    tph = get_tph(p_code, m, congsuat_dict, fix_code_pellet_dict)
+                    tpb = item.tons / total_batches
+                    added_h = tpb / tph
+                    proj_load = current_loads[m] + (shares[m] * added_h)
+                    if proj_load < best_load:
+                        best_load = proj_load
+                        best_m = m
+                shares[best_m] += 1
+                remaining_batches -= 1
+                
+            tpb = item.tons / total_batches
+            for m, b_cnt in shares.items():
+                if b_cnt > 0:
+                    split_tons = b_cnt * tpb
+                    split_item = copy(item)
+                    split_item.batches = b_cnt
+                    split_item.tons = split_tons
+                    split_item.line_cv = m
+                    machine_jobs[m].append(split_item)
+                    
+                    tph = get_tph(p_code, m, congsuat_dict, fix_code_pellet_dict)
+                    current_loads[m] += split_tons / tph
+                    current_loads[m] += CHANGEOVER_TIME
+                    
+                    print(f"  ⚖️ CHIA MẺ ĐỘNG: Sản phẩm {p_code} được chia {b_cnt} mẻ ({split_tons:.1f}T) sang máy {m}")
+        else:
+            compatible_lines.sort(key=lambda m: current_loads[m])
+            best_m = compatible_lines[0]
+            
+            item.line_cv = best_m
+            machine_jobs[best_m].append(item)
+            
+            tph = get_tph(p_code, best_m, congsuat_dict, fix_code_pellet_dict)
+            current_loads[best_m] += item.tons / tph
+            current_loads[best_m] += CHANGEOVER_TIME
+            
+            print(f"  ⚖️ GÁN TỐI ƯU: Sản phẩm {p_code} ({item.tons:.1f}T) gán cho máy {best_m} (Tải hiện tại: {current_loads[best_m]:.2f}h)")
             
     # 4. Kiểm tra tải và thực hiện "Đá cám" tự động khi tổng thời gian vượt quá 22 giờ
     # Định nghĩa cấu hình để đá cám chéo
@@ -499,6 +635,21 @@ def plan_pellet_shifts(demand_list, tonbon_detail, congsuat_dict, fix_code_pelle
             
     print("  ✅ Đã phân chia ca và sắp xếp sinh học hoàn tất.")
     
+    # Cập nhật line_cv hiển thị cho demand_list gốc dựa trên thực tế phân bổ
+    # Để hiển thị dạng "PL4/PL3/PL6/PL7" trên bảng kế hoạch tổng hợp chính
+    LINE_ORDER_AGG = {
+        'PL1': 1, 'PL2': 2, 'PL3': 3, 'PL4': 4, 'PL5': 5, 'PL6': 6, 'PL7': 7, 'M': 8, '': 99
+    }
+    for item in demand_list:
+        p_code = item.product_code
+        assigned_machines = []
+        for m, jobs in machine_jobs.items():
+            if any(j.product_code == p_code for j in jobs):
+                assigned_machines.append(m)
+        if assigned_machines:
+            assigned_machines.sort(key=lambda x: LINE_ORDER_AGG.get(x, 99))
+            item.line_cv = '/'.join(assigned_machines)
+
     # 6. Trả về kết quả phân bổ Pellet và Cám bột đóng bao
     return {
         'pellet_plan': final_pl_plan,

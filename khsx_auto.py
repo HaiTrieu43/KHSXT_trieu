@@ -346,17 +346,43 @@ def main():
         item.ks_level = ks_level
     
     # ============================================
-    # BƯỚC 7: SẮP XẾP THEO LINE CV (QUY TẮC AN TOÀN SINH HỌC)
+    # BƯỚC 7: SẮP XẾP MIXER SEQUENCE XEN KẼ (INTERLEAVED LINE ORDER)
     # ============================================
-    # Sắp xếp: LINE CV (PL1→PL2→...→PL7→M) 
-    # → Trong cùng LINE: Cấp độ kháng sinh tăng dần (sạch chạy trước, thuốc chạy sau)
-    # → Trong cùng cấp độ: Mẻ lớn sản xuất trước (tons giảm dần)
-    print("\n🧬 Sắp xếp Mixer sequence theo an toàn sinh học kháng sinh...")
-    demand_list.sort(key=lambda x: (
-        LINE_ORDER.get(str(x.line_cv).strip().upper(), 99),
-        x.ks_level,
-        -x.tons
-    ))
+    # Sắp xếp: nhóm theo cấp độ kháng sinh (ks_level) tăng dần (sạch trước, thuốc sau)
+    # Trong cùng ks_level: chia giỏ theo line_cv và trộn xen kẽ (round-robin)
+    # để phân tán đều mẻ trộn cho các máy, tránh dồn ép tải vào 1 máy
+    print("\n🧬 Sắp xếp Mixer sequence theo an toàn sinh học kháng sinh và xen kẽ máy CV...")
+    from collections import defaultdict
+    ks_groups = defaultdict(list)
+    for item in demand_list:
+        ks_groups[item.ks_level].append(item)
+        
+    sorted_interleaved = []
+    for ks_lvl in sorted(ks_groups.keys()):
+        items_in_ks = ks_groups[ks_lvl]
+        
+        # Chia thành các giỏ theo line_cv
+        line_buckets = defaultdict(list)
+        for item in items_in_ks:
+            line_buckets[item.line_cv].append(item)
+            
+        # Sắp xếp các sản phẩm trong mỗi giỏ theo tấn giảm dần (mẻ lớn chạy trước ổn định máy)
+        for line in line_buckets:
+            line_buckets[line].sort(key=lambda x: -x.tons)
+            
+        # Sắp xếp các line_cv theo thứ tự để round-robin có hệ thống
+        active_lines = sorted(list(line_buckets.keys()), key=lambda l: LINE_ORDER.get(str(l).strip().upper(), 99))
+        
+        # Round-robin xen kẽ các dòng máy
+        ks_interleaved = []
+        while any(len(line_buckets[l]) > 0 for l in active_lines):
+            for line in active_lines:
+                if len(line_buckets[line]) > 0:
+                    ks_interleaved.append(line_buckets[line].pop(0))
+                    
+        sorted_interleaved.extend(ks_interleaved)
+        
+    demand_list = sorted_interleaved
     
     # ============================================
     # BƯỚC 7.5: LẬP KẾ HOẠCH PELLET (PL) CHI TIẾT THEO CA
