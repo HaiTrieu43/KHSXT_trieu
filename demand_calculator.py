@@ -109,13 +109,19 @@ def calculate_daily_demand(today_date, day_of_week, forecast, silo_plan, bacang,
         new_yesterday = {}
         for prod, data_y in (khsx_yesterday or {}).items():
             new_prod = _sub_code(prod)
+            cleaned_data = {
+                'planned': data_y.get('planned', 0),
+                'actual': data_y.get('actual', 0),
+                'shortfall': data_y.get('shortfall', max(0, data_y.get('planned', 0) - data_y.get('actual', 0))),
+                'pct': data_y.get('pct', (data_y.get('actual', 0) / data_y.get('planned', 1) * 100.0) if data_y.get('planned', 0) > 0 else 0.0)
+            }
             if new_prod in new_yesterday:
-                new_yesterday[new_prod]['planned'] += data_y.get('planned', 0)
-                new_yesterday[new_prod]['actual'] += data_y.get('actual', 0)
-                new_yesterday[new_prod]['shortfall'] += data_y.get('shortfall', 0)
+                new_yesterday[new_prod]['planned'] += cleaned_data['planned']
+                new_yesterday[new_prod]['actual'] += cleaned_data['actual']
+                new_yesterday[new_prod]['shortfall'] += cleaned_data['shortfall']
                 new_yesterday[new_prod]['pct'] = (new_yesterday[new_prod]['actual'] / new_yesterday[new_prod]['planned'] * 100.0) if new_yesterday[new_prod]['planned'] > 0 else 0.0
             else:
-                new_yesterday[new_prod] = data_y.copy()
+                new_yesterday[new_prod] = cleaned_data
         khsx_yesterday = new_yesterday
         
         # 8. Thay thế trong ffstock_details
@@ -230,13 +236,19 @@ def calculate_daily_demand(today_date, day_of_week, forecast, silo_plan, bacang,
     new_yesterday = {}
     for prod, data_y in (khsx_yesterday or {}).items():
         base_prod = _get_base_code(prod)
+        cleaned_data = {
+            'planned': data_y.get('planned', 0),
+            'actual': data_y.get('actual', 0),
+            'shortfall': data_y.get('shortfall', max(0, data_y.get('planned', 0) - data_y.get('actual', 0))),
+            'pct': data_y.get('pct', (data_y.get('actual', 0) / data_y.get('planned', 1) * 100.0) if data_y.get('planned', 0) > 0 else 0.0)
+        }
         if base_prod in new_yesterday:
-            new_yesterday[base_prod]['planned'] += data_y.get('planned', 0)
-            new_yesterday[base_prod]['actual'] += data_y.get('actual', 0)
-            new_yesterday[base_prod]['shortfall'] += data_y.get('shortfall', 0)
+            new_yesterday[base_prod]['planned'] += cleaned_data['planned']
+            new_yesterday[base_prod]['actual'] += cleaned_data['actual']
+            new_yesterday[base_prod]['shortfall'] += cleaned_data['shortfall']
             new_yesterday[base_prod]['pct'] = (new_yesterday[base_prod]['actual'] / new_yesterday[base_prod]['planned'] * 100.0) if new_yesterday[base_prod]['planned'] > 0 else 0.0
         else:
-            new_yesterday[base_prod] = data_y.copy()
+            new_yesterday[base_prod] = cleaned_data
     khsx_yesterday = new_yesterday
     
     # 4. Đã sản xuất trong tuần produced_this_week
