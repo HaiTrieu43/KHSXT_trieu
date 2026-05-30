@@ -2045,6 +2045,42 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // Tự động nạp lại kế hoạch khi thay đổi ngày trên ô Datepicker
+    if (elements.planTargetDate) {
+        elements.planTargetDate.addEventListener('change', async () => {
+            const targetDate = elements.planTargetDate.value;
+            if (!targetDate) return;
+            
+            const d = new Date(targetDate);
+            if (!isNaN(d.getTime())) {
+                const formattedDateStr = `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth()+1).padStart(2, '0')}-${d.getFullYear()}`;
+                appendTerminalLine(`🔍 Đang kiểm tra kế hoạch lưu trữ cho ngày: ${formattedDateStr}...`, 'text-info');
+                
+                try {
+                    const res = await fetch(`/api/plan-details/${formattedDateStr}`);
+                    const json = await res.json();
+                    
+                    if (json.success) {
+                        await loadPlanResults(formattedDateStr);
+                        showToast(`Nạp thành công kế hoạch ngày ${formattedDateStr}!`, 'success');
+                    } else {
+                        if (elements.btnGlobalExportExcel) {
+                            elements.btnGlobalExportExcel.style.display = 'none';
+                        }
+                        if (elements.dashboardPlanCard) {
+                            elements.dashboardPlanCard.style.display = 'none';
+                        }
+                        appendTerminalLine(`⚠️ Ngày ${formattedDateStr} chưa được lập kế hoạch sản xuất.`, 'text-warning');
+                        appendTerminalLine(`👉 Nhấn nút "BẮT ĐẦU TÍNH KHSX TỰ ĐỘNG" hoặc "LẬP KẾ HOẠCH CẢ TUẦN (7 NGÀY)" để tính toán.`, 'text-warning');
+                    }
+                } catch (err) {
+                    console.error("Lỗi khi chuyển ngày kế hoạch:", err);
+                    appendTerminalLine(`❌ Lỗi tải dữ liệu cho ngày ${formattedDateStr}.`, 'text-error');
+                }
+            }
+        });
+    }
+
     loadDataSourcesStatus();
     loadDataFreshness();
     initAutoPlanDetection();
